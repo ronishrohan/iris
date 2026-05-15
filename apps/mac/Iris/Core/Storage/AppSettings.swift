@@ -7,11 +7,6 @@ import Carbon.HIToolbox
 final class AppSettings {
     private let defaults = UserDefaults.standard
 
-    var launchAtLogin: Bool {
-        get { defaults.bool(forKey: K.launchAtLogin) }
-        set { defaults.set(newValue, forKey: K.launchAtLogin) }
-    }
-
     var deepseekApiKey: String {
         get { KeychainStore.shared.get(K.deepseekApiKey) ?? "" }
         set { KeychainStore.shared.set(newValue, for: K.deepseekApiKey) }
@@ -20,26 +15,6 @@ final class AppSettings {
     var defaultModel: String {
         get { defaults.string(forKey: K.defaultModel) ?? "deepseek-v4-flash" }
         set { defaults.set(newValue, forKey: K.defaultModel) }
-    }
-
-    var useThinkingMode: Bool {
-        get { defaults.bool(forKey: K.useThinkingMode) }
-        set { defaults.set(newValue, forKey: K.useThinkingMode) }
-    }
-
-    var wakeWordEnabled: Bool {
-        get { (defaults.object(forKey: K.wakeWordEnabled) as? Bool) ?? false }
-        set { defaults.set(newValue, forKey: K.wakeWordEnabled) }
-    }
-
-    var wakeWordSensitivity: Double {
-        get { (defaults.object(forKey: K.wakeWordSensitivity) as? Double) ?? 0.6 }
-        set { defaults.set(newValue, forKey: K.wakeWordSensitivity) }
-    }
-
-    var sttEngine: String {
-        get { defaults.string(forKey: K.sttEngine) ?? "apple" }
-        set { defaults.set(newValue, forKey: K.sttEngine) }
     }
 
     // Hotkey: default ⌥-Space
@@ -63,13 +38,8 @@ final class AppSettings {
     }
 
     private enum K {
-        static let launchAtLogin = "launchAtLogin"
         static let deepseekApiKey = "deepseekApiKey"
         static let defaultModel = "defaultModel"
-        static let useThinkingMode = "useThinkingMode"
-        static let wakeWordEnabled = "wakeWordEnabled"
-        static let wakeWordSensitivity = "wakeWordSensitivity"
-        static let sttEngine = "sttEngine"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
     }

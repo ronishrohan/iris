@@ -14,11 +14,12 @@ final class ConversationOrchestrator {
 
     func turn(userText: String) async {
         appState.latestTranscript = userText
+        appState.latestResponse = ""
         appState.phase = .thinking
 
         let apiKey = appState.settings.deepseekApiKey
         guard !apiKey.isEmpty else {
-            appState.phase = .error("Set a DeepSeek API key in Settings → Providers.")
+            appState.phase = .error("Add your DeepSeek key in Settings → Provider.")
             return
         }
 
@@ -28,7 +29,7 @@ final class ConversationOrchestrator {
 
         var messages: [ChatMessage] = [
             ChatMessage(role: .system,
-                        content: "You are Iris, a concise voice assistant on macOS. Use tools to actually do things. Keep replies short and conversational; you will be spoken aloud."),
+                        content: "You are Iris, a concise voice assistant on macOS. Use tools when they help. Keep replies short and conversational; they will be spoken aloud."),
             ChatMessage(role: .user, content: userText)
         ]
 
@@ -45,7 +46,6 @@ final class ConversationOrchestrator {
                          model: String) async throws {
         var assistantText = ""
         var pendingToolCalls: [Int: PendingToolCall] = [:]
-        var finishReason: String? = nil
 
         for try await event in client.stream(messages: messages, tools: tools, model: model) {
             switch event {
@@ -58,8 +58,8 @@ final class ConversationOrchestrator {
                 if let name { p.name = name }
                 if let d = argsDelta { p.arguments += d }
                 pendingToolCalls[idx] = p
-            case .finished(let reason):
-                finishReason = reason
+            case .finished:
+                break
             }
         }
 
@@ -106,7 +106,6 @@ final class ConversationOrchestrator {
             await tts.speak(assistantText)
         }
         appState.phase = .idle
-        _ = finishReason
     }
 
     private struct PendingToolCall {

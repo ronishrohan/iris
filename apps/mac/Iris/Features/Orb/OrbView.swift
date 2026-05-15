@@ -28,9 +28,7 @@ struct OrbView: View {
         if !appState.latestTranscript.isEmpty { return appState.latestTranscript }
         switch appState.phase {
         case .idle: return "Tap ⌥-Space to talk."
-        case .wakeDetected: return "Yes?"
         case .listening: return "Listening…"
-        case .transcribing: return "…"
         case .thinking: return "Thinking…"
         case .toolCalling(let n): return "Running \(n)…"
         case .speaking: return ""

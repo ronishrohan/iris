@@ -15,7 +15,7 @@ final class DeepSeekClient: LLMClient {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let url = baseURL.appendingPathComponent("/chat/completions")
+                    let url = baseURL.appendingPathComponent("chat/completions")
                     var req = URLRequest(url: url)
                     req.httpMethod = "POST"
                     req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")

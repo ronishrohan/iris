@@ -4,14 +4,7 @@ import Foundation
 final class ToolRegistry {
     static let builtIns: [any Tool] = [
         OpenAppTool(),
-        WebSearchTool(),
-        RemindersTool(),
-        MessagesTool(),
-        SpotifyTool(),
-        MusicAppTool(),
-        SystemControlTool(),
-        ScreenshotTool(),
-        ShellTool()
+        WebSearchTool()
     ]
 
     private let settings: AppSettings

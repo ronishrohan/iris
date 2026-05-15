@@ -30,9 +30,7 @@ struct MenuBarContent: View {
     private var phaseLabel: String {
         switch appState.phase {
         case .idle: "Idle"
-        case .wakeDetected: "Wake detected"
         case .listening: "Listening…"
-        case .transcribing: "Transcribing…"
         case .thinking: "Thinking…"
         case .toolCalling(let name): "Running tool: \(name)"
         case .speaking: "Speaking…"

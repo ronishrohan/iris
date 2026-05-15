@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
-import { streamDeepSeek } from '../lib/deepseek.js';
+import { streamDeepSeek, teeWithUsageTracking } from '../lib/deepseek.js';
+import { recordUsage } from '../lib/usage.js';
 
 export const proxy = new Hono();
 
@@ -9,16 +10,26 @@ proxy.use('*', requireAuth);
 proxy.use('*', rateLimit);
 
 proxy.post('/chat/completions', async (c) => {
+  const user = c.get('user');
   const body = await c.req.json();
 
-  // Force-disable BYOK key passthrough; we use our server-side key.
   const upstream = await streamDeepSeek(body);
 
   if (!upstream.ok || !upstream.body) {
     return c.json({ error: `upstream ${upstream.status}` }, 502);
   }
 
-  return new Response(upstream.body, {
+  const stream = teeWithUsageTracking(upstream.body, (u) => {
+    if (!u) return;
+    recordUsage({
+      userId: user.id,
+      model: u.model,
+      inputTokens: u.promptTokens,
+      outputTokens: u.completionTokens,
+    }).catch((e) => console.error('[usage] record failed', e));
+  });
+
+  return new Response(stream, {
     status: 200,
     headers: {
       'Content-Type': 'text/event-stream',
