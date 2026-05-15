@@ -1,0 +1,16 @@
+{
+  "name": "iris-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Iris — a SwiftUI Siri replacement for macOS",
+  "scripts": {
+    "server:dev": "pnpm --filter @iris/server dev",
+    "server:build": "pnpm --filter @iris/server build",
+    "mac:gen": "cd apps/mac && xcodegen generate",
+    "mac:build": "cd apps/mac && xcodebuild -scheme Iris -configuration Debug build"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}
