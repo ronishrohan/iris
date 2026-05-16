@@ -36,8 +36,19 @@ final class DeepSeekClient: LLMClient {
                     let (bytes, response) = try await URLSession.shared.bytes(for: req)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                         let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                        // Read whatever the server sent back so we can show
+                        // the real error reason instead of a generic 400.
+                        var errBody = ""
+                        for try await line in bytes.lines {
+                            errBody += line
+                            if errBody.count > 2000 { break }
+                        }
+                        let detail = errBody.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let msg = detail.isEmpty
+                            ? "HTTP \(status) from DeepSeek"
+                            : "HTTP \(status): \(detail)"
                         throw NSError(domain: "DeepSeek", code: status,
-                                      userInfo: [NSLocalizedDescriptionKey: "HTTP \(status)"])
+                                      userInfo: [NSLocalizedDescriptionKey: msg])
                     }
 
                     for try await line in bytes.lines {
@@ -55,6 +66,9 @@ final class DeepSeekClient: LLMClient {
                         let delta = (first["delta"] as? [String: Any]) ?? [:]
                         if let content = delta["content"] as? String, !content.isEmpty {
                             continuation.yield(.contentDelta(content))
+                        }
+                        if let reasoning = delta["reasoning_content"] as? String, !reasoning.isEmpty {
+                            continuation.yield(.reasoningDelta(reasoning))
                         }
                         if let tcs = delta["tool_calls"] as? [[String: Any]] {
                             for tc in tcs {
@@ -80,16 +94,25 @@ final class DeepSeekClient: LLMClient {
 
     private func msgToDict(_ m: ChatMessage) -> [String: Any] {
         var d: [String: Any] = ["role": m.role.rawValue]
-        if let c = m.content { d["content"] = c }
+        if let c = m.content, !c.isEmpty {
+            d["content"] = c
+        } else if m.role == .tool {
+            d["content"] = "(no output)"
+        }
+        // Thinking mode: DeepSeek requires the reasoning_content from the
+        // previous turn to be passed back on the assistant message.
+        if m.role == .assistant, let r = m.reasoningContent, !r.isEmpty {
+            d["reasoning_content"] = r
+        }
         if let id = m.toolCallId { d["tool_call_id"] = id }
-        if let tcs = m.toolCalls {
+        if let tcs = m.toolCalls, !tcs.isEmpty {
             d["tool_calls"] = tcs.map { tc -> [String: Any] in
                 [
                     "id": tc.id,
                     "type": tc.type,
                     "function": [
                         "name": tc.function.name,
-                        "arguments": tc.function.arguments
+                        "arguments": tc.function.arguments.isEmpty ? "{}" : tc.function.arguments
                     ]
                 ]
             }

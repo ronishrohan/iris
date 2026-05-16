@@ -5,9 +5,26 @@ final class ConversationOrchestrator {
     private let appState: AppState
     private let registry: ToolRegistry
 
+    /// Persistent message history for the current open-session. Reset
+    /// whenever the panel closes (see AppState.finishClose).
+    private var sessionMessages: [ChatMessage] = []
+    private let systemPrompt = ChatMessage(
+        role: .system,
+        content: """
+        You are Iris, a concise assistant on macOS. Use tools when they help. \
+        Keep replies short and clear. The user is talking to you through a \
+        small floating panel, so favor brevity over verbosity.
+        """
+    )
+
     init(appState: AppState) {
         self.appState = appState
         self.registry = ToolRegistry(settings: appState.settings)
+    }
+
+    /// Wipe the in-memory conversation. Called when the panel closes.
+    func resetSession() {
+        sessionMessages.removeAll(keepingCapacity: false)
     }
 
     func turn(userText: String) async {
@@ -24,50 +41,49 @@ final class ConversationOrchestrator {
         let tools = registry.enabledTools().map(\.spec)
         let model = appState.settings.defaultModel
 
-        var messages: [ChatMessage] = [
-            ChatMessage(role: .system,
-                        content: "You are Iris, a concise assistant on macOS. Use tools when they help. Keep replies short and clear."),
-            ChatMessage(role: .user, content: userText)
-        ]
+        // Build messages: system + prior session turns + this user turn.
+        var messages: [ChatMessage] = [systemPrompt]
+        messages.append(contentsOf: sessionMessages)
+        messages.append(ChatMessage(role: .user, content: userText))
 
         var ranAnyToolSuccessfully = false
+        var anyToolFailed = false
 
         do {
             try await runLoop(client: client,
                               messages: &messages,
                               tools: tools,
                               model: model,
-                              ranAnyToolSuccessfully: &ranAnyToolSuccessfully)
+                              ranAnyToolSuccessfully: &ranAnyToolSuccessfully,
+                              anyToolFailed: &anyToolFailed)
         } catch {
             appState.phase = .error(error.localizedDescription)
             return
         }
 
-        // Auto-dismiss the panel if all the user asked for was an action
-        // (a tool ran successfully) and the assistant's final reply is
-        // trivial / acknowledgement-only. Anything substantial stays
-        // visible so the user can read it.
-        if ranAnyToolSuccessfully && shouldAutoCloseAfter(response: appState.latestResponse) {
-            // Tiny delay so the user briefly sees the confirmation.
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            appState.dismiss()
+        // Persist the user turn and the assistant's final reply.
+        sessionMessages.append(ChatMessage(role: .user, content: userText))
+        if !appState.latestResponse.isEmpty {
+            sessionMessages.append(ChatMessage(role: .assistant, content: appState.latestResponse))
         }
-    }
 
-    private func shouldAutoCloseAfter(response: String) -> Bool {
-        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return true }
-        // If the assistant only said something short like
-        // "Opened Terminal." we don't need the panel hanging around.
-        return trimmed.count <= 120 && !trimmed.contains("\n")
+        // Push the finished response onto the stack so a follow-up
+        // question doesn't wipe it visually.
+        if !appState.latestResponse.isEmpty {
+            appState.archiveCurrentResponse()
+        }
+        _ = ranAnyToolSuccessfully
+        _ = anyToolFailed
     }
 
     private func runLoop(client: LLMClient,
                          messages: inout [ChatMessage],
                          tools: [ToolSpec],
                          model: String,
-                         ranAnyToolSuccessfully: inout Bool) async throws {
+                         ranAnyToolSuccessfully: inout Bool,
+                         anyToolFailed: inout Bool) async throws {
         var assistantText = ""
+        var assistantReasoning = ""
         var pendingToolCalls: [Int: PendingToolCall] = [:]
 
         for try await event in client.stream(messages: messages, tools: tools, model: model) {
@@ -75,6 +91,8 @@ final class ConversationOrchestrator {
             case .contentDelta(let s):
                 assistantText += s
                 appState.latestResponse = assistantText
+            case .reasoningDelta(let s):
+                assistantReasoning += s
             case .toolCallDelta(let idx, let id, let name, let argsDelta):
                 var p = pendingToolCalls[idx] ?? PendingToolCall()
                 if let id { p.id = id }
@@ -94,10 +112,13 @@ final class ConversationOrchestrator {
                              type: "function",
                              function: .init(name: p.name, arguments: p.arguments))
                 }
-            messages.append(ChatMessage(role: .assistant,
-                                        content: assistantText.isEmpty ? nil : assistantText,
-                                        toolCallId: nil,
-                                        toolCalls: toolCalls))
+            messages.append(ChatMessage(
+                role: .assistant,
+                content: assistantText.isEmpty ? nil : assistantText,
+                reasoningContent: assistantReasoning.isEmpty ? nil : assistantReasoning,
+                toolCallId: nil,
+                toolCalls: toolCalls
+            ))
 
             for call in toolCalls {
                 appState.phase = .toolCalling(name: call.function.name)
@@ -108,9 +129,11 @@ final class ConversationOrchestrator {
                         ranAnyToolSuccessfully = true
                     } else {
                         result = "Unknown tool: \(call.function.name)"
+                        anyToolFailed = true
                     }
                 } catch {
                     result = "Error: \(error.localizedDescription)"
+                    anyToolFailed = true
                 }
                 messages.append(ChatMessage(role: .tool,
                                             content: result,
@@ -123,7 +146,8 @@ final class ConversationOrchestrator {
                               messages: &messages,
                               tools: tools,
                               model: model,
-                              ranAnyToolSuccessfully: &ranAnyToolSuccessfully)
+                              ranAnyToolSuccessfully: &ranAnyToolSuccessfully,
+                              anyToolFailed: &anyToolFailed)
             return
         }
 

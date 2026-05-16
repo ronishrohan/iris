@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Observation
 
 @MainActor
@@ -15,6 +16,11 @@ final class AppState {
     var phase: Phase = .idle
     var inputText: String = ""
     var latestResponse: String = ""
+
+    /// Previously completed responses for this session. The visible card
+    /// stack shows the newest response on top with older ones peeking out
+    /// behind it with a small offset.
+    var pastResponses: [String] = []
 
     /// Bumped each time the panel should animate itself closed. The view
     /// observes this, plays the exit animation, then calls
@@ -73,6 +79,12 @@ final class AppState {
     func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // Push the currently-visible response onto the stack BEFORE we
+        // wipe latestResponse, so the previous answer stays on screen as
+        // a card behind the incoming new one.
+        if !latestResponse.isEmpty {
+            pastResponses.append(latestResponse)
+        }
         inputText = ""
         latestResponse = ""
         submitPulseCounter += 1
@@ -82,18 +94,38 @@ final class AppState {
         }
     }
 
+    /// Called when a turn fully completes, so we can later move it onto
+    /// the past-responses stack if the user starts another turn.
+    func archiveCurrentResponse() {
+        // No-op for now: we archive lazily at submit() time. The hook
+        // exists so the orchestrator can stay decoupled.
+    }
+
     func requestClose() {
         guard orbController.isShown, !orbController.isClosing else { return }
         orbController.isClosing = true
         closeRequestCounter += 1
     }
 
-    func dismiss() { requestClose() }
+    /// User-intent dismissal (Esc, click outside). Ignored while we are
+    /// awaiting a tool result — otherwise the permission dialogs that
+    /// macOS pops on first use of Reminders / Contacts / etc. would
+    /// trigger our outside-click monitor and close Iris just as the
+    /// user clicks "Allow".
+    func dismiss() {
+        if case .toolCalling = phase { return }
+        // Also block dismissals while a system modal is up (consent
+        // dialogs and the like make NSApp.modalWindow non-nil).
+        if NSApp.modalWindow != nil { return }
+        requestClose()
+    }
 
     func finishClose() {
         orbController.hide()
         phase = .idle
         inputText = ""
         latestResponse = ""
+        pastResponses.removeAll()
+        orchestrator?.resetSession()
     }
 }

@@ -3,8 +3,39 @@ import Foundation
 @MainActor
 final class ToolRegistry {
     static let builtIns: [any Tool] = [
+        // App control
         OpenAppTool(),
-        WebSearchTool()
+        QuitAppTool(),
+        OpenURLTool(),
+
+        // System
+        SystemControlTool(),
+
+        // Quick utilities
+        WorldClockTool(),
+        CalculateTool(),
+        SetTimerTool(),
+
+        // Knowledge
+        WebSearchTool(),
+        WikipediaTool(),
+        WeatherTool(),
+
+        // Productivity
+        CreateReminderTool(),
+        ListRemindersTool(),
+        CreateCalendarEventTool(),
+        ListCalendarEventsTool(),
+        TakeNoteTool(),
+        SearchFilesTool(),
+
+        // Communication
+        SendIMessageTool(),
+        SendEmailTool(),
+        LookupContactTool(),
+
+        // Media
+        MusicControlTool()
     ]
 
     private let settings: AppSettings

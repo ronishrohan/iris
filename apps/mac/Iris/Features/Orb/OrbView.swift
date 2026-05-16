@@ -11,6 +11,7 @@ struct IrisPanelView: View {
     @State private var pulseScale: CGFloat = 1.0
     @State private var pulseBrightness: Double = 0.0
     @State private var observedPulseCounter = 0
+    @State private var frontCardHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 12) {
@@ -18,23 +19,15 @@ struct IrisPanelView: View {
                 inputRow
             }
 
-            if !appState.latestResponse.isEmpty || isWorking {
-                GlassEffectContainer(spacing: 14) {
-                    responseView
-                        .background(
-                            SiriBleedTint(progress: tintProgress, cornerRadius: 20)
-                        )
-                        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-                }
-                .transition(
-                    .asymmetric(
-                        insertion: .opacity
-                            .combined(with: .scale(scale: 0.96, anchor: .top)),
-                        removal: .opacity
-                            .combined(with: .scale(scale: 0.98, anchor: .top))
-                    )
-                )
-            }
+            responseStack
+                .animation(.spring(response: 0.42, dampingFraction: 0.85),
+                           value: appState.pastResponses.count)
+                .animation(.spring(response: 0.34, dampingFraction: 0.82),
+                           value: appState.latestResponse.isEmpty)
+                .animation(.spring(response: 0.34, dampingFraction: 0.82),
+                           value: isWorking)
+                .animation(.spring(response: 0.34, dampingFraction: 0.82),
+                           value: isErrored)
         }
         .frame(width: 640, alignment: .center)
         .fixedSize(horizontal: true, vertical: true)
@@ -120,6 +113,121 @@ struct IrisPanelView: View {
         }
     }
 
+    /// Up to the 3 most recent past responses, newest-last (so newest is
+    /// closest to the front card).
+    private var visiblePastResponses: [String] {
+        Array(appState.pastResponses.suffix(3))
+    }
+
+    private var hasFrontCard: Bool {
+        !appState.latestResponse.isEmpty || isWorking || isErrored
+    }
+
+    @ViewBuilder
+    private var responseStack: some View {
+        if hasFrontCard || !appState.pastResponses.isEmpty {
+            ZStack(alignment: .top) {
+                // Front (newest) card at the top of the stack. We measure
+                // its height so past cards can sit right under its
+                // bottom edge — each past card peeking out by a few px
+                // more than the one in front of it.
+                if hasFrontCard {
+                    frontResponseCard
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: FrontCardHeightKey.self,
+                                    value: geo.size.height
+                                )
+                            }
+                        )
+                        .zIndex(0)
+                }
+
+                // Past responses laid out below the front card's bottom
+                // edge. Newest-past sits closest to the front; older
+                // ones peek out a little further down.
+                ForEach(Array(visiblePastResponses.enumerated().reversed()), id: \.offset) { pair in
+                    let stackIndex = pair.offset
+                    let text = pair.element
+                    // depth = 1 for the card immediately behind the
+                    // front, 2 for the one behind that, etc.
+                    let depth = visiblePastResponses.count - stackIndex
+                    pastResponseCard(text: text, depth: depth)
+                        .zIndex(Double(-depth))
+                }
+            }
+            .onPreferenceChange(FrontCardHeightKey.self) { h in
+                frontCardHeight = h
+            }
+        }
+    }
+
+    private var frontResponseCard: some View {
+        GlassEffectContainer(spacing: 14) {
+            responseView
+                .background(
+                    SiriBleedTint(progress: tintProgress, cornerRadius: 20)
+                )
+                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        }
+        .transition(
+            .asymmetric(
+                insertion: .opacity
+                    .combined(with: .scale(scale: 0.96, anchor: .top)),
+                removal: .opacity
+                    .combined(with: .scale(scale: 0.98, anchor: .top))
+            )
+        )
+    }
+
+    /// `depth` is 1 for the card directly behind the front one, 2 for
+    /// the one behind that, etc. The card sits below the front card's
+    /// bottom edge — its top is at `frontCardHeight - overlap`, so only
+    /// a thin "peek" of it is visible. Each deeper card pokes out a
+    /// little more than the one above.
+    private func pastResponseCard(text: String, depth: Int) -> some View {
+        // How much of the card pokes out below the one in front of it.
+        let peek: CGFloat = 14
+        // How much of itself sits hidden behind the card above.
+        let overlap: CGFloat = 22
+        // Total y offset from the top of the ZStack.
+        let yOffset = max(0, frontCardHeight - overlap) + CGFloat(depth - 1) * peek
+        let scale = max(0.86, 1.0 - CGFloat(depth) * 0.03)
+        let textOpacity = max(0.20, 1.0 - Double(depth) * 0.30)
+        return Text(text)
+            .font(.system(size: 14, design: .rounded))
+            .foregroundStyle(.primary.opacity(textOpacity))
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .scaleEffect(scale, anchor: .top)
+            .offset(y: yOffset)
+            .allowsHitTesting(false)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private var isErrored: Bool {
+        if case .error = appState.phase { return true }
+        return false
+    }
+
+    private var errorMessage: String? {
+        if case .error(let msg) = appState.phase { return msg }
+        return nil
+    }
+
     @ViewBuilder
     private var inputRow: some View {
         HStack(spacing: 12) {
@@ -173,7 +281,17 @@ struct IrisPanelView: View {
     @ViewBuilder
     private var responseView: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if !appState.latestResponse.isEmpty {
+            if let err = errorMessage {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red.opacity(0.85))
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(err)
+                        .font(.system(size: 14, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                }
+            } else if !appState.latestResponse.isEmpty {
                 ScrollView {
                     MarkdownText(appState.latestResponse)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,6 +508,16 @@ struct MarkdownText: View {
         case 3: 18
         default: 16
         }
+    }
+}
+
+// MARK: - Preference keys
+
+private struct FrontCardHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 { value = next }
     }
 }
 
