@@ -461,21 +461,28 @@ struct ResponseScrollBody: View {
     }
 
     /// Soft fade mask: opaque in the middle, fades to transparent at
-    /// the top/bottom edges when there's hidden content in that
-    /// direction. Returns a fully opaque mask if content doesn't
-    /// overflow.
+    /// both the top and the bottom edges whenever the content
+    /// overflows the visible window. The two fades soften as the user
+    /// scrolls to either end, so they don't crop off the first or
+    /// last line of text when pinned.
     @ViewBuilder
     private var scrollMask: some View {
         if overflows {
-            let topFade    = min(1, scrolledFromTop / fadeHeight)
-            let bottomFade = min(1, remainingBelow / fadeHeight)
-            let topAlpha:    Double = 1.0 - 0.95 * topFade
-            let bottomAlpha: Double = 1.0 - 0.95 * bottomFade
+            // Strength of each edge's fade: full when there's
+            // off-screen content in that direction, easing toward 0
+            // as we approach that edge.
+            let topStrength    = min(1, scrolledFromTop / fadeHeight)
+            let bottomStrength = min(1, remainingBelow / fadeHeight)
+            // Even at the very top/bottom, keep a faint hairline fade
+            // so the text doesn't kiss the corner.
+            let topAlpha:    Double = 1.0 - (0.15 + 0.80 * topStrength)
+            let bottomAlpha: Double = 1.0 - (0.15 + 0.80 * bottomStrength)
+            let fadeFraction = fadeHeight / max(visibleHeight, 1)
             LinearGradient(
                 stops: [
                     .init(color: .white.opacity(topAlpha),    location: 0.0),
-                    .init(color: .white,                      location: fadeHeight / max(visibleHeight, 1)),
-                    .init(color: .white,                      location: 1.0 - fadeHeight / max(visibleHeight, 1)),
+                    .init(color: .white,                      location: fadeFraction),
+                    .init(color: .white,                      location: 1.0 - fadeFraction),
                     .init(color: .white.opacity(bottomAlpha), location: 1.0)
                 ],
                 startPoint: .top,
