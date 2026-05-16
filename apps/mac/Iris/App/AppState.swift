@@ -190,7 +190,20 @@ final class AppState {
         }
     }
 
+    /// True while a turn is in flight (thinking, streaming, or running
+    /// a tool). The input row uses this to block new submissions until
+    /// the current response finishes.
+    var isGenerating: Bool {
+        switch phase {
+        case .thinking, .toolCalling: return true
+        default: return false
+        }
+    }
+
     func submit() {
+        // Block re-entry while a turn is already in flight so the user
+        // can't pile prompts on top of a generating response.
+        if isGenerating { return }
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if isListening { stopDictation(cancel: false) }

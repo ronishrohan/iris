@@ -234,7 +234,7 @@ struct IrisPanelView: View {
         HStack(spacing: 12) {
             micToggle
 
-            TextField(appState.isListening ? "Listening…" : "Ask Iris Something",
+            TextField(textFieldPlaceholder,
                       text: Binding(
                         get: { appState.inputText },
                         set: { appState.inputText = $0 }
@@ -244,7 +244,12 @@ struct IrisPanelView: View {
             .foregroundStyle(.primary)
             .focused($inputFocused)
             .lineLimit(1...4)
-            .onSubmit { appState.submit() }
+            .disabled(isWorking)
+            .opacity(isWorking ? 0.55 : 1.0)
+            .onSubmit {
+                guard !isWorking else { return }
+                appState.submit()
+            }
         }
         .padding(.leading, 7)
         .padding(.trailing, 18)
@@ -258,8 +263,14 @@ struct IrisPanelView: View {
         .scaleEffect(pulseScale, anchor: .center)
     }
 
+    private var textFieldPlaceholder: String {
+        if isWorking { return "Working…" }
+        return appState.isListening ? "Listening…" : "Ask Iris Something"
+    }
+
     private var micToggle: some View {
         Button {
+            guard !isWorking else { return }
             appState.toggleMic()
         } label: {
             Image(systemName: "mic")
@@ -278,6 +289,8 @@ struct IrisPanelView: View {
                 .animation(.easeInOut(duration: 0.2), value: appState.isListening)
         }
         .buttonStyle(.plain)
+        .disabled(isWorking)
+        .opacity(isWorking ? 0.55 : 1.0)
         .help(appState.isListening ? "Stop listening" : "Start voice input")
     }
 
@@ -295,12 +308,31 @@ struct IrisPanelView: View {
                         .textSelection(.enabled)
                 }
             } else if !appState.latestResponse.isEmpty {
-                ScrollView {
-                    MarkdownText(appState.latestResponse)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        MarkdownText(appState.latestResponse)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                            .id("iris.response.body")
+                            .background(
+                                // Sentinel pinned to the very bottom that
+                                // we scroll to whenever the stream grows.
+                                GeometryReader { _ in Color.clear }
+                            )
+                        Color.clear
+                            .frame(height: 1)
+                            .id("iris.response.bottom")
+                    }
+                    .frame(maxHeight: 240)
+                    .onChange(of: appState.latestResponse) { _, _ in
+                        // Keep the newest streamed text in view. Use
+                        // `.bottom` so we follow the tail of the stream
+                        // rather than yanking back to the top.
+                        withAnimation(.linear(duration: 0.12)) {
+                            proxy.scrollTo("iris.response.bottom", anchor: .bottom)
+                        }
+                    }
                 }
-                .frame(maxHeight: 240)
             } else if isWorking {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
