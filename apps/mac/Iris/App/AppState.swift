@@ -41,6 +41,7 @@ final class AppState {
     let settings = AppSettings()
     let orbController: OrbWindowController
     let hotkey = GlobalHotkey()
+    let doubleTap = DoubleTapModifier()
     let wakeWord = WakeWordEngine()
     let dictation = LiveDictation()
     private var orchestrator: ConversationOrchestrator?
@@ -49,9 +50,12 @@ final class AppState {
         self.orbController = OrbWindowController()
         registerHotkey()
         configureVoice()
-        if settings.wakeWordEnabled {
-            wakeWord.start()
-        }
+        // TEMP DEBUG: don't auto-start wake-word at app launch so we
+        // can isolate whether SFSpeechRecognizer-driven audio engine is
+        // breaking keyboard routing.
+        // if settings.wakeWordEnabled {
+        //     wakeWord.start()
+        // }
     }
 
     private func ensureOrchestrator() -> ConversationOrchestrator {
@@ -62,10 +66,15 @@ final class AppState {
     }
 
     private func registerHotkey() {
+        // TEMP DEBUG: DoubleTapModifier disabled to test if its global
+        // flagsChanged monitor is what's breaking key routing.
+        // doubleTap.modifier = .option
+        // doubleTap.onTrigger = { [weak self] in
+        //     Task { @MainActor in self?.togglePanel() }
+        // }
+        // doubleTap.start()
         hotkey.onTrigger = { [weak self] in
-            Task { @MainActor in
-                self?.togglePanel()
-            }
+            Task { @MainActor in self?.togglePanel() }
         }
         hotkey.register(keyCode: settings.hotkeyKeyCode, modifiers: settings.hotkeyModifiers)
     }
@@ -99,6 +108,7 @@ final class AppState {
         inputText = ""
         latestResponse = ""
         voiceMode = true
+        wakeWord.pause()
         orbController.show(appState: self)
         startDictation()
     }
@@ -116,7 +126,6 @@ final class AppState {
     private func startDictation() {
         // Pause wake word so we don't pick up our own input.
         wakeWord.pause()
-        VoiceOut.shared.stop()
         Task { @MainActor in
             let ok = await LiveDictation.requestAuthorization()
             guard ok else {
@@ -137,54 +146,55 @@ final class AppState {
     private func stopDictation(cancel: Bool) {
         if cancel { dictation.cancel() } else { dictation.stop() }
         isListening = false
-        // Resume wake-word listening only if the panel is closing or
-        // the user explicitly turned voice mode off.
-        if !orbController.isShown || !voiceMode {
-            if settings.wakeWordEnabled { wakeWord.resume() }
+        // While the panel is open we leave wake-word OFF so keyboard
+        // routing stays clean. Wake-word resumes only when the panel
+        // closes (see finishClose).
+    }
+
+    private func resumeWakeWordIfEnabled() {
+        guard settings.wakeWordEnabled else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            wakeWord.resume()
         }
     }
 
     func togglePanel() {
-        // Fully closed (or mid-close): open fresh. Open & not yet closing:
-        // start the close animation. This way pressing the hotkey during the
-        // close animation reopens immediately instead of being swallowed.
         if orbController.isShown && !orbController.isClosing {
             requestClose()
         } else {
-            // If a close animation is still in flight, abort it by tearing
-            // the panel down immediately, then open a brand-new one.
             if orbController.isShown {
                 orbController.hide()
             }
             phase = .idle
             inputText = ""
             latestResponse = ""
+            // The wake-word audio engine running in the background can
+            // interfere with the panel's keyboard routing on macOS 26.
+            // Pause it while the panel is open; resume on close. The
+            // panel itself has its own dictation engine for voice input.
+            wakeWord.pause()
             orbController.show(appState: self)
+            if settings.voiceOnShortcut {
+                voiceMode = true
+                startDictation()
+            }
         }
     }
 
     func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        // If we were listening, stop the mic now — we have the query.
         if isListening { stopDictation(cancel: false) }
-        VoiceOut.shared.stop()
-        // Push the currently-visible response onto the stack BEFORE we
-        // wipe latestResponse, so the previous answer stays on screen as
-        // a card behind the incoming new one.
         if !latestResponse.isEmpty {
             pastResponses.append(latestResponse)
         }
         inputText = ""
         latestResponse = ""
         submitPulseCounter += 1
-        let shouldSpeak = voiceMode
         Task { [weak self] in
             guard let self else { return }
             await self.ensureOrchestrator().turn(userText: trimmed)
-            if shouldSpeak, !self.latestResponse.isEmpty {
-                VoiceOut.shared.speak(self.latestResponse)
-            }
         }
     }
 
@@ -223,8 +233,12 @@ final class AppState {
         if isListening { dictation.cancel() }
         isListening = false
         voiceMode = false
-        VoiceOut.shared.stop()
-        if settings.wakeWordEnabled { wakeWord.resume() }
+        // Fully tear down wake-word so a stale audio engine doesn't
+        // linger across close → open cycles, then schedule a fresh
+        // start with a small delay so macOS has time to release the
+        // mic device.
+        wakeWord.stop()
+        resumeWakeWordIfEnabled()
         orchestrator?.resetSession()
     }
 
@@ -233,6 +247,9 @@ final class AppState {
         if settings.wakeWordEnabled {
             wakeWord.start()
         } else {
+            // Hard-stop the engine and DO NOT auto-resume it after the
+            // next dictation cycle. The mic is only opened when the user
+            // explicitly taps the mic button.
             wakeWord.stop()
         }
     }

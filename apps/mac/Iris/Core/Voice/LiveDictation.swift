@@ -24,7 +24,7 @@ final class LiveDictation: NSObject {
     var onError: ((Error) -> Void)?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var silenceTimer: Timer?
@@ -104,11 +104,19 @@ final class LiveDictation: NSObject {
         if audioEngine.isRunning {
             audioEngine.stop()
             audioEngine.inputNode.removeTap(onBus: 0)
+        } else {
+            // Even when the engine isn't reported running, force a tap
+            // removal to be safe — otherwise the next engine that tries
+            // to claim the input can silently fail.
+            audioEngine.inputNode.removeTap(onBus: 0)
         }
         request?.endAudio()
         task?.cancel()
         task = nil
         request = nil
+        // Replace the engine instance entirely so the underlying audio
+        // unit is fully released before wake-word tries to claim it.
+        audioEngine = AVAudioEngine()
         isRunning = false
     }
 

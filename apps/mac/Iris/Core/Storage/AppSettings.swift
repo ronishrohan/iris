@@ -33,10 +33,20 @@ final class AppSettings {
     }
 
     /// Whether the "Hey Iris" wake-word engine should run while the
-    /// app is open. Defaults to on.
+    /// app is open. Defaults to on. When OFF, Iris never opens the mic
+    /// unless the user manually clicks the mic button.
     var wakeWordEnabled: Bool {
         get { (defaults.object(forKey: K.wakeWordEnabled) as? Bool) ?? true }
         set { defaults.set(newValue, forKey: K.wakeWordEnabled) }
+    }
+
+    /// Whether opening the panel via the global hotkey should
+    /// immediately start voice dictation. When OFF, the panel opens in
+    /// text mode and the user has to click the mic button to start
+    /// dictation. Defaults to off.
+    var voiceOnShortcut: Bool {
+        get { (defaults.object(forKey: K.voiceOnShortcut) as? Bool) ?? false }
+        set { defaults.set(newValue, forKey: K.voiceOnShortcut) }
     }
 
     func isToolEnabled(_ name: String) -> Bool {
@@ -54,5 +64,6 @@ final class AppSettings {
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
         static let wakeWordEnabled = "wakeWordEnabled"
+        static let voiceOnShortcut = "voiceOnShortcut"
     }
 }

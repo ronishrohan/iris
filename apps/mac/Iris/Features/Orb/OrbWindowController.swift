@@ -82,6 +82,14 @@ final class OrbWindowController {
         p.orderFrontRegardless()
         p.makeKey()
 
+        // Diagnostics: log key/active state right after show, and after
+        // a tick so we can see if focus is being lost asynchronously.
+        print("[Iris] show: isKey=\(p.isKeyWindow) isVisible=\(p.isVisible) firstResp=\(String(describing: p.firstResponder))")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak p] in
+            guard let p else { return }
+            print("[Iris] +0.3s: isKey=\(p.isKeyWindow) isVisible=\(p.isVisible) firstResp=\(String(describing: p.firstResponder))")
+        }
+
         // Outside our window: dismiss but don't consume.
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
@@ -110,6 +118,7 @@ final class OrbWindowController {
             }
             return event
         }
+
     }
 
     func hide() {
