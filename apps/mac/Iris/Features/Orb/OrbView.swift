@@ -403,7 +403,20 @@ struct IrisPanelView: View {
 struct ResponseScrollBody: View {
     let text: String
     private let cap: CGFloat = 240
+    private let fadeHeight: CGFloat = 24
     @State private var contentHeight: CGFloat = 0
+    @State private var scrollOffset: CGFloat = 0
+
+    /// True only when the content is taller than the visible cap.
+    private var overflows: Bool { contentHeight > cap + 0.5 }
+    /// Visible window height — natural for short content, capped for long.
+    private var visibleHeight: CGFloat { min(contentHeight, cap) }
+    /// How far we've scrolled from the top (0 at top, > 0 once scrolled).
+    private var scrolledFromTop: CGFloat { max(0, -scrollOffset) }
+    /// How far the bottom edge of the content is from the visible bottom.
+    private var remainingBelow: CGFloat {
+        max(0, contentHeight - visibleHeight - scrolledFromTop)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -416,6 +429,8 @@ struct ResponseScrollBody: View {
                             Color.clear
                                 .preference(key: ResponseBodyHeightKey.self,
                                             value: geo.size.height)
+                                .preference(key: ResponseScrollOffsetKey.self,
+                                            value: geo.frame(in: .named("iris.response.scroll")).minY)
                         }
                     )
                     .id("iris.response.body")
@@ -423,16 +438,51 @@ struct ResponseScrollBody: View {
                     .frame(height: 1)
                     .id("iris.response.bottom")
             }
-            .frame(height: min(contentHeight, cap),
-                   alignment: .top)
+            .coordinateSpace(name: "iris.response.scroll")
+            .frame(height: visibleHeight, alignment: .top)
+            .mask(scrollMask)
             .onPreferenceChange(ResponseBodyHeightKey.self) { h in
                 contentHeight = h
             }
+            .onPreferenceChange(ResponseScrollOffsetKey.self) { y in
+                scrollOffset = y
+            }
             .onChange(of: text) { _, _ in
+                // Only follow the tail of the stream when content
+                // actually overflows the visible window. Short replies
+                // never need a scroll — letting it fire on them creates
+                // a tiny up-then-down jiggle on first render.
+                guard overflows else { return }
                 withAnimation(.linear(duration: 0.12)) {
                     proxy.scrollTo("iris.response.bottom", anchor: .bottom)
                 }
             }
+        }
+    }
+
+    /// Soft fade mask: opaque in the middle, fades to transparent at
+    /// the top/bottom edges when there's hidden content in that
+    /// direction. Returns a fully opaque mask if content doesn't
+    /// overflow.
+    @ViewBuilder
+    private var scrollMask: some View {
+        if overflows {
+            let topFade    = min(1, scrolledFromTop / fadeHeight)
+            let bottomFade = min(1, remainingBelow / fadeHeight)
+            let topAlpha:    Double = 1.0 - 0.95 * topFade
+            let bottomAlpha: Double = 1.0 - 0.95 * bottomFade
+            LinearGradient(
+                stops: [
+                    .init(color: .white.opacity(topAlpha),    location: 0.0),
+                    .init(color: .white,                      location: fadeHeight / max(visibleHeight, 1)),
+                    .init(color: .white,                      location: 1.0 - fadeHeight / max(visibleHeight, 1)),
+                    .init(color: .white.opacity(bottomAlpha), location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        } else {
+            Color.white
         }
     }
 }
@@ -442,6 +492,13 @@ private struct ResponseBodyHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         let next = nextValue()
         if next > 0 { value = next }
+    }
+}
+
+private struct ResponseScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -706,10 +763,11 @@ struct MicListeningTint: View {
     @ViewBuilder
     private var tintBody: some View {
         // Idle mic still has a clearly visible baseline; voice
-        // amplitude pushes intensity toward full.
+        // amplitude pushes intensity toward full AND drives the
+        // shader-side drift speed + brightness.
         let amp = max(0, min(1, Double(amplitude)))
-        let intensity = Float(0.75 + amp * 0.25)
-        NebulaView(intensity: intensity)
+        let intensity = Float(0.80 + amp * 0.20)
+        NebulaView(intensity: intensity, amp: Float(amp))
             .mask(
                 LinearGradient(
                     stops: [

@@ -13,6 +13,8 @@ import SwiftUI
 /// for the listening pill, or 1.0 for the response card.
 struct NebulaView: View {
     var intensity: Float = 1.0
+    /// Voice amplitude (0…1). Drives drift speed AND brightness.
+    var amp: Float = 0.0
 
     var body: some View {
         TimelineView(.animation) { ctx in
@@ -27,10 +29,11 @@ struct NebulaView: View {
                         ShaderLibrary.iris_nebula(
                             .float(t),
                             .float2(w, h),
-                            .float(intensity)
+                            .float(intensity),
+                            .float(max(0, min(1, amp)))
                         )
                     )
-                    .blur(radius: 10)
+                    .blur(radius: 8)
                     .blendMode(.plusLighter)
                     .allowsHitTesting(false)
             }
