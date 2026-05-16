@@ -791,20 +791,22 @@ struct MicListeningTint: View {
             }
         }
         .onChange(of: amplitude) { _, new in
-            // Soft threshold: anything below `gate` reads as silence;
-            // values above are remapped to 0…1 with a gentle curve so
-            // small voice swells move the shader subtly rather than
-            // making it jump.
-            let gate: Float = 0.12
+            // Light shaping only: a tiny noise gate at the bottom so
+            // ambient hiss doesn't tickle the shader, then a quick
+            // power curve to make small voice swells more visible.
+            // No multi-tenth-second easing here — the publisher in
+            // LiveDictation already smooths frame-to-frame, and we
+            // want this signal to feel snappy.
+            let gate: Float = 0.05
             let raw = max(0, min(1, new))
             let shaped: Float
             if raw <= gate {
                 shaped = 0
             } else {
                 let t = (raw - gate) / (1 - gate)
-                shaped = t * t * (3 - 2 * t)  // smoothstep
+                shaped = sqrtf(t)  // boosts quieter speech
             }
-            withAnimation(.easeOut(duration: 0.45)) {
+            withAnimation(.easeOut(duration: 0.10)) {
                 dampedAmp = shaped
             }
         }

@@ -138,12 +138,10 @@ final class LiveDictation: NSObject {
 
     private func publishLevel(_ raw: Float) {
         guard isRunning else { return }
-        // Heavier exponential smoothing so the visualization glides
-        // between values rather than tracking every audio frame. Attack
-        // is still faster than release so a sudden onset is felt, just
-        // not as a step change.
-        let attack: Float = 0.18
-        let release: Float = 0.06
+        // Snappy on attack so speech onsets are felt, gentler on
+        // release so the nebula doesn't pump down between syllables.
+        let attack: Float = 0.45
+        let release: Float = 0.10
         let coeff = raw > smoothedLevel ? attack : release
         smoothedLevel += (raw - smoothedLevel) * coeff
         onLevel?(max(0, min(1, smoothedLevel)))

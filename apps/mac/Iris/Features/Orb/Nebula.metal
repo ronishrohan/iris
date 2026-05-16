@@ -48,20 +48,20 @@ static float n_fbm(float2 p) {
     float aspect = bounds.x / max(bounds.y, 1.0);
     float2 p = float2(uv.x * aspect, uv.y);
 
-    // Voice drives time-drift. Idle has a slow base drift; speech
-    // accelerates it. Kept gentle so the animation eases rather than
-    // surges — the Swift side already gates / damps the amplitude
-    // signal, but a softer max multiplier here makes the whole thing
-    // feel less twitchy.
-    float driftSpeed = 1.0 + amp * 2.5;
+    // Voice drives time-drift. Idle has a clearly perceptible base
+    // drift; speech multiplies it noticeably so the pill visibly
+    // surges. Swift side does light smoothing only — the shader is
+    // expected to track amp pretty directly.
+    float driftSpeed = 1.0 + amp * 5.0;
     float t = time * driftSpeed;
 
     // Lower spatial frequencies = bigger, blobbier bumps. Three drift
     // directions at three scales keep it from looking like a single
-    // periodic pattern.
-    float n1 = n_fbm(p * 0.55 + float2( t * 0.035,  t * 0.025));
-    float n2 = n_fbm(p * 1.20 + float2(-t * 0.030,  t * 0.045));
-    float n3 = n_fbm(p * 2.40 + float2( t * 0.050, -t * 0.030));
+    // periodic pattern. Speeds are 5-8× the old values so the motion
+    // is unmistakable at idle, not just at full volume.
+    float n1 = n_fbm(p * 0.55 + float2( t * 0.22,  t * 0.16));
+    float n2 = n_fbm(p * 1.20 + float2(-t * 0.18,  t * 0.27));
+    float n3 = n_fbm(p * 2.40 + float2( t * 0.31, -t * 0.20));
     float density = saturate(n1 * 0.75 + n2 * 0.30 + n3 * 0.12);
 
     // Smoke base: very faint cool-white haze that gets slightly
@@ -77,7 +77,7 @@ static float n_fbm(float2 p) {
     // field is "on". Gives drifting orange / red / yellow blobs rather
     // than uniform sparkle. Voice loudness lowers the threshold so warm
     // pockets bloom more easily while you talk.
-    float warmField = n_fbm(p * 0.32 + float2(t * 0.018, -t * 0.013));
+    float warmField = n_fbm(p * 0.32 + float2(t * 0.11, -t * 0.08));
     float warmLo    = mix(0.55, 0.40, amp);
     float warmHi    = mix(0.78, 0.60, amp);
     float warmMask  = smoothstep(warmLo, warmHi, density)
