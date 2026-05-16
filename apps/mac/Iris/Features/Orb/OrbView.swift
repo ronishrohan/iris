@@ -255,9 +255,15 @@ struct IrisPanelView: View {
         .padding(.trailing, 18)
         .padding(.vertical, 7)
         // Listening nebula: bleeds in from the left of the input pill,
-        // sweeps right while gently shifting hues.
+        // sweeps right while gently shifting hues. Speed reacts to the
+        // current mic amplitude. We keep it active while the user is in
+        // voice mode (not just while the dictation engine is up) so it
+        // doesn't blink off between turns.
         .background(
-            MicListeningTint(active: appState.isListening)
+            MicListeningTint(
+                active: appState.voiceMode || appState.isListening,
+                amplitude: appState.micAmplitude
+            )
         )
         .glassEffect(.regular.interactive(), in: .capsule)
         .scaleEffect(pulseScale, anchor: .center)
@@ -265,7 +271,12 @@ struct IrisPanelView: View {
 
     private var textFieldPlaceholder: String {
         if isWorking { return "Working…" }
-        return appState.isListening ? "Listening…" : "Ask Iris Something"
+        // Stay on "Listening…" whenever we're in voice mode, even
+        // briefly between turns while the dictation engine is being
+        // re-armed. Without this, the placeholder flickers back to
+        // "Ask Iris Something" for a frame before re-arming.
+        if appState.voiceMode || appState.isListening { return "Listening…" }
+        return "Ask Iris Something"
     }
 
     private var micToggle: some View {
@@ -631,12 +642,23 @@ struct SiriBleedTint: View {
 /// active. It bleeds in from the left edge, sweeps right, and gently
 /// shifts hue over time. Renders absolutely nothing when not active, so
 /// it can't flicker on first panel show.
+///
+/// `amplitude` (0...1, smoothed mic level) accelerates the underlying
+/// drift so the nebula visibly reacts to the user's voice: a quiet idle
+/// state breathes; loud speech sweeps faster.
 struct MicListeningTint: View {
     let active: Bool
+    let amplitude: Float
 
     @State private var enterProgress: CGFloat = 0
     @State private var exitProgress: CGFloat = 0   // fades out the running tint
     @State private var shouldRender: Bool = false  // gates rendering entirely
+    /// Integrated "voice phase" — we advance this instead of relying on
+    /// the wall-clock so the perceived animation speed actually scales
+    /// with `amplitude`. Lives in @State so it persists across
+    /// TimelineView ticks.
+    @State private var voicePhase: Double = 0
+    @State private var lastTick: Date = .now
 
     var body: some View {
         Group {
@@ -655,6 +677,9 @@ struct MicListeningTint: View {
                 shouldRender = true
                 enterProgress = 0
                 exitProgress = 1
+                // Restart the phase clock so dt doesn't include the gap
+                // since the tint was last visible.
+                lastTick = .now
                 withAnimation(.easeOut(duration: 0.9)) {
                     enterProgress = 1.0
                 }
@@ -672,6 +697,22 @@ struct MicListeningTint: View {
         }
     }
 
+    /// Advance the voice-driven phase and return the value to render at
+    /// for this tick. Schedules the @State update via DispatchQueue so
+    /// we don't mutate state inside a view body.
+    private func advanceVoicePhase(now: Date) -> Double {
+        let amp = max(0, min(1, Double(amplitude)))
+        let speed = 1.0 + amp * 5.0
+        let dt = now.timeIntervalSince(lastTick)
+        let safeDt = min(max(0, dt), 0.1)
+        let next = voicePhase + safeDt * speed
+        DispatchQueue.main.async {
+            voicePhase = next
+            lastTick = now
+        }
+        return next
+    }
+
     @ViewBuilder
     private var tintBody: some View {
         GeometryReader { geo in
@@ -679,7 +720,7 @@ struct MicListeningTint: View {
             let h = geo.size.height
 
             TimelineView(.animation) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate
+                let t = advanceVoicePhase(now: ctx.date)
                 let hueOffset = t.truncatingRemainder(dividingBy: 24) / 24.0
                 let c1 = Color(hue: (0.78 + hueOffset).truncatingRemainder(dividingBy: 1),
                                saturation: 0.85, brightness: 1.0)

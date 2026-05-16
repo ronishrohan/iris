@@ -38,6 +38,10 @@ final class AppState {
     /// True while the dictation engine is actively transcribing.
     var isListening: Bool = false
 
+    /// Smoothed live mic amplitude in 0...1 while the dictation engine
+    /// is running. Drives the reactive nebula speed in the input pill.
+    var micAmplitude: Float = 0
+
     let settings = AppSettings()
     let orbController: OrbWindowController
     let hotkey = GlobalHotkey()
@@ -94,6 +98,10 @@ final class AppState {
         }
         dictation.onError = { [weak self] _ in
             self?.isListening = false
+            self?.micAmplitude = 0
+        }
+        dictation.onLevel = { [weak self] level in
+            self?.micAmplitude = level
         }
     }
 
@@ -154,6 +162,7 @@ final class AppState {
     private func stopDictation(cancel: Bool) {
         if cancel { dictation.cancel() } else { dictation.stop() }
         isListening = false
+        micAmplitude = 0
         // While the panel is open we leave wake-word OFF so keyboard
         // routing stays clean. Wake-word resumes only when the panel
         // closes (see finishClose).
@@ -269,6 +278,7 @@ final class AppState {
         pastResponses.removeAll()
         if isListening { dictation.cancel() }
         isListening = false
+        micAmplitude = 0
         voiceMode = false
         // Fully tear down wake-word so a stale audio engine doesn't
         // linger across close → open cycles, then schedule a fresh

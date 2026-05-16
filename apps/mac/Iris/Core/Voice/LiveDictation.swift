@@ -23,6 +23,11 @@ final class LiveDictation: NSObject {
     /// by an internal stop so callers can simply reset their UI.
     var onError: ((Error) -> Void)?
 
+    /// Called ~30× per second with a smoothed input amplitude in 0...1
+    /// while dictation is running. Drops to 0 when stopped. The UI
+    /// uses this to drive a reactive mic visualization.
+    var onLevel: ((Float) -> Void)?
+
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -30,6 +35,10 @@ final class LiveDictation: NSObject {
     private var silenceTimer: Timer?
     private var lastTranscript: String = ""
     private(set) var isRunning = false
+    /// Exponentially-smoothed amplitude, 0...1. Updated from the audio
+    /// tap thread and mirrored to the main actor before invoking
+    /// `onLevel`.
+    private var smoothedLevel: Float = 0
 
     /// Silence window (seconds) after which we treat the user as done.
     var silenceTimeout: TimeInterval = 1.2
@@ -69,7 +78,12 @@ final class LiveDictation: NSObject {
         let format = input.outputFormat(forBus: 0)
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buf, _ in
-            self?.request?.append(buf)
+            guard let self else { return }
+            self.request?.append(buf)
+            let level = Self.rmsLevel(buf)
+            Task { @MainActor [weak self] in
+                self?.publishLevel(level)
+            }
         }
 
         audioEngine.prepare()
@@ -118,6 +132,37 @@ final class LiveDictation: NSObject {
         // unit is fully released before wake-word tries to claim it.
         audioEngine = AVAudioEngine()
         isRunning = false
+        smoothedLevel = 0
+        onLevel?(0)
+    }
+
+    private func publishLevel(_ raw: Float) {
+        guard isRunning else { return }
+        // Exponential smoothing so the visualization eases rather than
+        // jitters with every buffer.
+        let attack: Float = 0.45   // rises quickly when the user speaks
+        let release: Float = 0.15  // falls more gently
+        let coeff = raw > smoothedLevel ? attack : release
+        smoothedLevel += (raw - smoothedLevel) * coeff
+        onLevel?(max(0, min(1, smoothedLevel)))
+    }
+
+    /// Compute a normalized RMS level (0...1) for the buffer. The
+    /// raw RMS off a vocal mic typically peaks around 0.2-0.3, so we
+    /// scale up and clamp to 1 to get a useful UI range.
+    private static func rmsLevel(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.floatChannelData else { return 0 }
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else { return 0 }
+        let samples = channelData[0]
+        var sum: Float = 0
+        for i in 0..<frameLength {
+            let s = samples[i]
+            sum += s * s
+        }
+        let rms = sqrtf(sum / Float(frameLength))
+        // Scale: ~0.25 raw RMS → ~1.0 visualized.
+        return min(1.0, rms * 4.0)
     }
 
     /// Stop without firing `onComplete`. Used when the user cancels.
