@@ -81,15 +81,10 @@ struct IrisPanelView: View {
                 hasStartedTint = false
             }
         }
-        .onExitCommand {
-            // Esc cancels a turn that's still working; otherwise it
-            // dismisses the panel as before.
-            if isWorking {
-                appState.interrupt()
-            } else {
-                appState.dismiss()
-            }
-        }
+        // Esc handling lives on OrbWindowController's local NSEvent
+        // monitor so it works while the TextField is disabled during a
+        // generating turn (a disabled view is out of the responder
+        // chain and never receives onExitCommand).
         .animation(.spring(response: 0.32, dampingFraction: 0.78),
                    value: appState.latestResponse.isEmpty)
         .animation(.spring(response: 0.32, dampingFraction: 0.78),

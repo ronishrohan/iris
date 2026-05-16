@@ -29,6 +29,13 @@ final class OrbWindowController {
     /// underneath via the PassThroughPanel hit-test.
     private var localMouseMonitor: Any?
 
+    /// Local key-down monitor for Esc. SwiftUI's `onExitCommand` only
+    /// fires while a focused view is in the responder chain, but our
+    /// TextField becomes `.disabled(isWorking)` during a turn and gives
+    /// up focus — so we'd miss the Esc the user presses to cancel.
+    /// This monitor catches Esc unconditionally for our own panel.
+    private var localKeyMonitor: Any?
+
     var isVisible: Bool { panel?.isVisible ?? false }
 
     func show(appState: AppState) {
@@ -119,6 +126,21 @@ final class OrbWindowController {
             return event
         }
 
+        // Esc: interrupt a working turn, otherwise dismiss. Lives on a
+        // local key-down monitor so it works even when our TextField is
+        // disabled (and therefore not in the responder chain).
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown]
+        ) { [weak appState] event in
+            // 53 == kVK_Escape
+            guard event.keyCode == 53, let appState else { return event }
+            if appState.isGenerating {
+                appState.interrupt()
+            } else {
+                appState.dismiss()
+            }
+            return nil  // consume so AppKit's beep / default handling stays out of it
+        }
     }
 
     func hide() {
@@ -133,6 +155,10 @@ final class OrbWindowController {
         if let m = localMouseMonitor {
             NSEvent.removeMonitor(m)
             localMouseMonitor = nil
+        }
+        if let m = localKeyMonitor {
+            NSEvent.removeMonitor(m)
+            localKeyMonitor = nil
         }
 
         panel?.orderOut(nil)

@@ -19,28 +19,33 @@ struct SearchFilesTool: Tool {
         guard let q = args["query"] as? String, !q.isEmpty else { throw ToolError.invalidArguments }
         let kind = (args["kind"] as? String)?.lowercased()
 
-        var predicates: [String] = []
-        let escaped = q.replacingOccurrences(of: "\"", with: "\\\"")
-        predicates.append("kMDItemFSName LIKE[c] \"*\(escaped)*\" || kMDItemTextContent LIKE[c] \"*\(escaped)*\"")
+        // Build a Spotlight query. Use NSPredicate's argument substitution
+        // (the `%@` form) so quotes / wildcards / unicode in the query
+        // can't break the string — that was the source of an earlier
+        // "Syntax error in Metadata query string" crash.
+        let wildcard = "*\(q)*"
+        var clauses: [NSPredicate] = []
+        clauses.append(NSPredicate(format: "(kMDItemFSName LIKE[c] %@) OR (kMDItemDisplayName LIKE[c] %@) OR (kMDItemTextContent LIKE[c] %@)",
+                                   wildcard, wildcard, wildcard))
         if let kind {
-            let typeUTI: String? = {
+            // `kMDItemContentTypeTree` is a multi-valued attribute, so
+            // the right operator is membership rather than equality.
+            let uti: String? = {
                 switch kind {
                 case "pdf":         return "com.adobe.pdf"
                 case "image":       return "public.image"
-                case "document":    return "public.composite-content"
-                case "spreadsheet": return "com.microsoft.excel.xls"
+                case "document":    return "public.content"
+                case "spreadsheet": return "public.spreadsheet"
                 case "video":       return "public.movie"
                 case "audio":       return "public.audio"
                 default: return nil
                 }
             }()
-            if let uti = typeUTI { predicates.append("kMDItemContentTypeTree == \"\(uti)\"") }
+            if let uti {
+                clauses.append(NSPredicate(format: "%@ IN kMDItemContentTypeTree", uti))
+            }
         }
-
-        let predicateStr = predicates.map { "(\($0))" }.joined(separator: " && ")
-        guard let predicate = NSPredicate(fromMetadataQueryString: predicateStr) else {
-            throw ToolError.invalidArguments
-        }
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: clauses)
 
         let paths: [String] = await withCheckedContinuation { cont in
             let box = QueryBox()
