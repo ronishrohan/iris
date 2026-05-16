@@ -22,6 +22,7 @@ struct NebulaView: View {
                 let w = Float(geo.size.width)
                 let h = Float(geo.size.height)
                 Rectangle()
+                    .fill(.white)
                     .colorEffect(
                         ShaderLibrary.iris_nebula(
                             .float(t),
@@ -29,7 +30,8 @@ struct NebulaView: View {
                             .float(intensity)
                         )
                     )
-                    .blur(radius: 14)
+                    .blur(radius: 10)
+                    .blendMode(.plusLighter)
                     .allowsHitTesting(false)
             }
         }

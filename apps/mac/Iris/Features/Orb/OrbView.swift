@@ -364,31 +364,7 @@ struct IrisPanelView: View {
                         )
                 }
                 if !appState.latestResponse.isEmpty {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            MarkdownText(appState.latestResponse)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
-                                .id("iris.response.body")
-                                .background(
-                                    // Sentinel pinned to the very bottom that
-                                    // we scroll to whenever the stream grows.
-                                    GeometryReader { _ in Color.clear }
-                                )
-                            Color.clear
-                                .frame(height: 1)
-                                .id("iris.response.bottom")
-                        }
-                        .frame(maxHeight: 240)
-                        .onChange(of: appState.latestResponse) { _, _ in
-                            // Keep the newest streamed text in view. Use
-                            // `.bottom` so we follow the tail of the stream
-                            // rather than yanking back to the top.
-                            withAnimation(.linear(duration: 0.12)) {
-                                proxy.scrollTo("iris.response.bottom", anchor: .bottom)
-                            }
-                        }
-                    }
+                    ResponseScrollBody(text: appState.latestResponse)
                 }
             }
             if isWorking && errorMessage == nil &&
@@ -418,6 +394,57 @@ struct IrisPanelView: View {
 
 /// Renders LLM markdown without pulling in a third-party dependency.
 /// Splits on blank lines into block elements (headings, bullet lists,
+/// Wraps the streaming markdown body in a ScrollView only when the
+/// content is taller than the visible cap. Short replies render at
+/// their natural intrinsic height with no extra slack below the text;
+/// long replies scroll inside the cap. Without this the ScrollView
+/// would always grab `maxHeight`, leaving a fat empty band beneath
+/// short answers.
+struct ResponseScrollBody: View {
+    let text: String
+    private let cap: CGFloat = 240
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                MarkdownText(text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear
+                                .preference(key: ResponseBodyHeightKey.self,
+                                            value: geo.size.height)
+                        }
+                    )
+                    .id("iris.response.body")
+                Color.clear
+                    .frame(height: 1)
+                    .id("iris.response.bottom")
+            }
+            .frame(height: min(contentHeight, cap),
+                   alignment: .top)
+            .onPreferenceChange(ResponseBodyHeightKey.self) { h in
+                contentHeight = h
+            }
+            .onChange(of: text) { _, _ in
+                withAnimation(.linear(duration: 0.12)) {
+                    proxy.scrollTo("iris.response.bottom", anchor: .bottom)
+                }
+            }
+        }
+    }
+}
+
+private struct ResponseBodyHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 { value = next }
+    }
+}
+
 /// code blocks, paragraphs); each block uses SwiftUI's built-in
 /// `AttributedString(markdown:)` for inline formatting (bold, italics,
 /// inline code, links).
@@ -678,10 +705,10 @@ struct MicListeningTint: View {
 
     @ViewBuilder
     private var tintBody: some View {
-        // Idle mic still gets a low baseline so the nebula is visible
-        // but doesn't churn. Voice loudness pushes intensity up.
+        // Idle mic still has a clearly visible baseline; voice
+        // amplitude pushes intensity toward full.
         let amp = max(0, min(1, Double(amplitude)))
-        let intensity = Float(0.55 + amp * 0.45)
+        let intensity = Float(0.75 + amp * 0.25)
         NebulaView(intensity: intensity)
             .mask(
                 LinearGradient(

@@ -54,29 +54,30 @@ static float n_fbm(float2 p) {
     float n3 = n_fbm(p * 6.2 + float2( time * 0.070, -time * 0.040));
     float density = saturate(n1 * 0.65 + n2 * 0.35 + n3 * 0.18);
 
-    // Smoke base: semi-transparent black. Curve density so the tails
-    // taper into clear glass rather than uniform grey.
-    float smokeAlpha = pow(density, 1.35) * 0.55 * intensity;
-    half3  rgb       = half3(0.0);
+    // Smoke base: very faint cool-white haze so the noise reads as
+    // texture against the dark glass. Curve density so the tails taper
+    // into clear glass rather than uniform grey.
+    float smokeAlpha = pow(density, 1.4) * 0.32 * intensity;
+    half3  rgb       = half3(0.78h, 0.80h, 0.86h);
     half   alpha     = half(smokeAlpha);
 
     // Warm clusters: only where the density peaks AND a slow large-scale
-    // field is "on". Gives drifting orange/red blobs rather than uniform
-    // sparkle.
+    // field is "on". Gives drifting orange / red / yellow blobs rather
+    // than uniform sparkle.
     float warmField = n_fbm(p * 0.85 + float2(time * 0.020, -time * 0.015));
-    float warmMask  = smoothstep(0.55, 0.78, density)
-                    * smoothstep(0.48, 0.72, warmField)
+    float warmMask  = smoothstep(0.50, 0.75, density)
+                    * smoothstep(0.45, 0.70, warmField)
                     * intensity;
 
     half3 warmA = half3(1.00h, 0.55h, 0.12h); // orange
     half3 warmB = half3(1.00h, 0.28h, 0.06h); // red
-    half3 warmC = half3(1.00h, 0.80h, 0.25h); // yellow tip
+    half3 warmC = half3(1.00h, 0.82h, 0.28h); // yellow
     half3 warm  = mix(warmA, warmB, half(warmField));
     warm        = mix(warm, warmC,
-                      half(smoothstep(0.70, 0.95, density)));
+                      half(smoothstep(0.68, 0.92, density)));
 
-    rgb   = mix(rgb, warm, half(warmMask * 0.85));
-    alpha = clamp(alpha + half(warmMask * 0.45), 0.0h, 1.0h);
+    rgb   = mix(rgb, warm, half(warmMask));
+    alpha = clamp(alpha + half(warmMask * 0.55), 0.0h, 1.0h);
 
     return half4(rgb * alpha, alpha);
 }
