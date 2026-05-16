@@ -30,17 +30,43 @@ final class ConversationOrchestrator {
             ChatMessage(role: .user, content: userText)
         ]
 
+        var ranAnyToolSuccessfully = false
+
         do {
-            try await runLoop(client: client, messages: &messages, tools: tools, model: model)
+            try await runLoop(client: client,
+                              messages: &messages,
+                              tools: tools,
+                              model: model,
+                              ranAnyToolSuccessfully: &ranAnyToolSuccessfully)
         } catch {
             appState.phase = .error(error.localizedDescription)
+            return
         }
+
+        // Auto-dismiss the panel if all the user asked for was an action
+        // (a tool ran successfully) and the assistant's final reply is
+        // trivial / acknowledgement-only. Anything substantial stays
+        // visible so the user can read it.
+        if ranAnyToolSuccessfully && shouldAutoCloseAfter(response: appState.latestResponse) {
+            // Tiny delay so the user briefly sees the confirmation.
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            appState.dismiss()
+        }
+    }
+
+    private func shouldAutoCloseAfter(response: String) -> Bool {
+        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        // If the assistant only said something short like
+        // "Opened Terminal." we don't need the panel hanging around.
+        return trimmed.count <= 120 && !trimmed.contains("\n")
     }
 
     private func runLoop(client: LLMClient,
                          messages: inout [ChatMessage],
                          tools: [ToolSpec],
-                         model: String) async throws {
+                         model: String,
+                         ranAnyToolSuccessfully: inout Bool) async throws {
         var assistantText = ""
         var pendingToolCalls: [Int: PendingToolCall] = [:]
 
@@ -79,6 +105,7 @@ final class ConversationOrchestrator {
                 do {
                     if let tool = registry.find(call.function.name) {
                         result = try await tool.run(argumentsJSON: call.function.arguments)
+                        ranAnyToolSuccessfully = true
                     } else {
                         result = "Unknown tool: \(call.function.name)"
                     }
@@ -92,7 +119,11 @@ final class ConversationOrchestrator {
             }
 
             appState.phase = .thinking
-            try await runLoop(client: client, messages: &messages, tools: tools, model: model)
+            try await runLoop(client: client,
+                              messages: &messages,
+                              tools: tools,
+                              model: model,
+                              ranAnyToolSuccessfully: &ranAnyToolSuccessfully)
             return
         }
 

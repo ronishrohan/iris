@@ -7,9 +7,13 @@ import Carbon.HIToolbox
 final class AppSettings {
     private let defaults = UserDefaults.standard
 
+    // Stored in UserDefaults rather than the keychain so unsigned/ad-hoc
+    // dev builds don't trigger a "Iris wants to use your confidential
+    // information" prompt every time the signature changes. Swap back to
+    // KeychainStore once the app ships with a stable signing identity.
     var deepseekApiKey: String {
-        get { KeychainStore.shared.get(K.deepseekApiKey) ?? "" }
-        set { KeychainStore.shared.set(newValue, for: K.deepseekApiKey) }
+        get { defaults.string(forKey: K.deepseekApiKey) ?? "" }
+        set { defaults.set(newValue, forKey: K.deepseekApiKey) }
     }
 
     var defaultModel: String {

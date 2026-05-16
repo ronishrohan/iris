@@ -48,9 +48,17 @@ final class AppState {
     }
 
     func togglePanel() {
-        if orbController.isVisible {
+        // Fully closed (or mid-close): open fresh. Open & not yet closing:
+        // start the close animation. This way pressing the hotkey during the
+        // close animation reopens immediately instead of being swallowed.
+        if orbController.isShown && !orbController.isClosing {
             requestClose()
         } else {
+            // If a close animation is still in flight, abort it by tearing
+            // the panel down immediately, then open a brand-new one.
+            if orbController.isShown {
+                orbController.hide()
+            }
             phase = .idle
             inputText = ""
             latestResponse = ""
@@ -61,6 +69,7 @@ final class AppState {
     func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        inputText = ""
         latestResponse = ""
         Task { [weak self] in
             guard let self else { return }
@@ -69,7 +78,8 @@ final class AppState {
     }
 
     func requestClose() {
-        guard orbController.isVisible else { return }
+        guard orbController.isShown, !orbController.isClosing else { return }
+        orbController.isClosing = true
         closeRequestCounter += 1
     }
 
