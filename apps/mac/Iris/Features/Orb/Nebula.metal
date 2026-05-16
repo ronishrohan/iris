@@ -39,7 +39,7 @@ static float n_fbm(float2 p) {
 // `pos` is in pixel coordinates and `bounds` is the layer size.
 [[ stitchable ]] half4 iris_nebula(float2 pos, half4 cur,
                                    float time, float2 bounds,
-                                   float intensity, float amp)
+                                   float intensity)
 {
     float2 uv = pos / max(bounds, float2(1.0));
 
@@ -48,40 +48,28 @@ static float n_fbm(float2 p) {
     float aspect = bounds.x / max(bounds.y, 1.0);
     float2 p = float2(uv.x * aspect, uv.y);
 
-    // Voice drives time-drift. Idle has a clearly perceptible base
-    // drift; speech multiplies it noticeably so the pill visibly
-    // surges. Swift side does light smoothing only — the shader is
-    // expected to track amp pretty directly.
-    float driftSpeed = 1.0 + amp * 5.0;
-    float t = time * driftSpeed;
+    // Fixed, clearly visible drift speed. No reactivity.
+    float t = time;
 
-    // Lower spatial frequencies = bigger, blobbier bumps. Three drift
-    // directions at three scales keep it from looking like a single
-    // periodic pattern. Speeds are 5-8× the old values so the motion
-    // is unmistakable at idle, not just at full volume.
+    // Three drift directions at three scales so it doesn't look like
+    // a single periodic pattern.
     float n1 = n_fbm(p * 0.55 + float2( t * 0.22,  t * 0.16));
     float n2 = n_fbm(p * 1.20 + float2(-t * 0.18,  t * 0.27));
     float n3 = n_fbm(p * 2.40 + float2( t * 0.31, -t * 0.20));
     float density = saturate(n1 * 0.75 + n2 * 0.30 + n3 * 0.12);
 
-    // Smoke base: very faint cool-white haze that gets slightly
-    // brighter with voice (kept subtle so the pill doesn't pulse).
-    // Curve density so the tails taper into clear glass rather than
-    // uniform grey.
-    float baseBright = 0.45 + amp * 0.25;
-    float smokeAlpha = pow(density, 1.3) * baseBright * intensity;
+    // Smoke base: faint cool-white haze. Curve density so the tails
+    // taper into clear glass rather than uniform grey.
+    float smokeAlpha = pow(density, 1.3) * 0.55 * intensity;
     half3  rgb       = half3(0.85h, 0.87h, 0.93h);
     half   alpha     = half(smokeAlpha);
 
     // Warm clusters: only where the density peaks AND a slow large-scale
     // field is "on". Gives drifting orange / red / yellow blobs rather
-    // than uniform sparkle. Voice loudness lowers the threshold so warm
-    // pockets bloom more easily while you talk.
+    // than uniform sparkle.
     float warmField = n_fbm(p * 0.32 + float2(t * 0.11, -t * 0.08));
-    float warmLo    = mix(0.55, 0.40, amp);
-    float warmHi    = mix(0.78, 0.60, amp);
-    float warmMask  = smoothstep(warmLo, warmHi, density)
-                    * smoothstep(warmLo - 0.05, warmHi - 0.05, warmField)
+    float warmMask  = smoothstep(0.55, 0.78, density)
+                    * smoothstep(0.50, 0.73, warmField)
                     * intensity;
 
     half3 warmA = half3(1.00h, 0.55h, 0.12h); // orange
@@ -92,8 +80,7 @@ static float n_fbm(float2 p) {
                       half(smoothstep(0.68, 0.92, density)));
 
     rgb   = mix(rgb, warm, half(warmMask));
-    alpha = clamp(alpha + half(warmMask * (0.55 + amp * 0.35)),
-                  0.0h, 1.0h);
+    alpha = clamp(alpha + half(warmMask * 0.55), 0.0h, 1.0h);
 
     return half4(rgb * alpha, alpha);
 }

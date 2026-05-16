@@ -292,8 +292,7 @@ struct IrisPanelView: View {
         // the pill while voice mode is active.
         .background(
             MicListeningTint(
-                active: appState.voiceMode || appState.isListening,
-                amplitude: appState.micAmplitude
+                active: appState.voiceMode || appState.isListening
             )
         )
         // Black tint between content and glass to push the pill toward
@@ -743,16 +742,10 @@ struct SiriBleedTint: View {
 /// amplitude.
 struct MicListeningTint: View {
     let active: Bool
-    let amplitude: Float
 
     @State private var enterProgress: CGFloat = 0
     @State private var exitProgress: CGFloat = 0
     @State private var shouldRender: Bool = false
-    /// Heavily-damped amplitude used to drive the shader. Updated on
-    /// every external `amplitude` change with a soft animation so the
-    /// shader gets a continuous, gliding signal rather than the raw
-    /// frame-by-frame ticks coming off the mic.
-    @State private var dampedAmp: Float = 0
 
     var body: some View {
         Group {
@@ -784,42 +777,13 @@ struct MicListeningTint: View {
                     try? await Task.sleep(nanoseconds: 280_000_000)
                     if !active { shouldRender = false }
                 }
-                // Glide back to silence so the shader doesn't snap.
-                withAnimation(.easeInOut(duration: 0.6)) {
-                    dampedAmp = 0
-                }
-            }
-        }
-        .onChange(of: amplitude) { _, new in
-            // Light shaping only: a tiny noise gate at the bottom so
-            // ambient hiss doesn't tickle the shader, then a quick
-            // power curve to make small voice swells more visible.
-            // No multi-tenth-second easing here — the publisher in
-            // LiveDictation already smooths frame-to-frame, and we
-            // want this signal to feel snappy.
-            let gate: Float = 0.05
-            let raw = max(0, min(1, new))
-            let shaped: Float
-            if raw <= gate {
-                shaped = 0
-            } else {
-                let t = (raw - gate) / (1 - gate)
-                shaped = sqrtf(t)  // boosts quieter speech
-            }
-            withAnimation(.easeOut(duration: 0.10)) {
-                dampedAmp = shaped
             }
         }
     }
 
     @ViewBuilder
     private var tintBody: some View {
-        // `dampedAmp` is the smoothed, gated signal we hand to the
-        // shader. The raw `amplitude` jitters too much frame to frame
-        // to drive a shader directly.
-        let amp = Double(dampedAmp)
-        let intensity = Float(0.80 + amp * 0.20)
-        NebulaView(intensity: intensity, amp: Float(amp))
+        NebulaView(intensity: 0.95)
             .mask(
                 LinearGradient(
                     stops: [
