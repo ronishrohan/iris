@@ -168,7 +168,7 @@ struct IrisPanelView: View {
         GlassEffectContainer(spacing: 14) {
             responseView
                 .background(
-                    SiriBleedTint(progress: tintProgress, cornerRadius: 20)
+                    ResponseBleedTint(progress: tintProgress, cornerRadius: 20)
                 )
                 .glassEffect(.regular, in: .rect(cornerRadius: 20))
         }
@@ -245,14 +245,15 @@ struct IrisPanelView: View {
             .focused($inputFocused)
             .lineLimit(1...4)
             .onSubmit { appState.submit() }
-
-            sendButton
-                .opacity(appState.inputText.isEmpty ? 0 : 1)
-                .allowsHitTesting(!appState.inputText.isEmpty)
-                .animation(.easeOut(duration: 0.15), value: appState.inputText.isEmpty)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.leading, 7)
+        .padding(.trailing, 18)
+        .padding(.vertical, 7)
+        // Listening nebula: bleeds in from the left of the input pill,
+        // sweeps right while gently shifting hues.
+        .background(
+            MicListeningTint(active: appState.isListening)
+        )
         .glassEffect(.regular.interactive(), in: .capsule)
         .scaleEffect(pulseScale, anchor: .center)
     }
@@ -261,54 +262,23 @@ struct IrisPanelView: View {
         Button {
             appState.toggleMic()
         } label: {
-            ZStack {
-                if appState.isListening {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.purple, .pink],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            )
-                        )
-                        .scaleEffect(listeningPulse)
-                        .onAppear { listeningPulse = 1.0 }
-                        .animation(
-                            .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
-                            value: listeningPulse
-                        )
-                        .task { listeningPulse = 1.15 }
-                } else {
-                    Image(systemName: "mic")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 22, height: 22)
+            Image(systemName: "mic")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(
+                    appState.isListening
+                        ? AnyShapeStyle(LinearGradient(
+                            colors: [.purple, .pink],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ))
+                        : AnyShapeStyle(.secondary)
+                )
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+                .glassEffect(.regular.interactive(), in: .circle)
+                .animation(.easeInOut(duration: 0.2), value: appState.isListening)
         }
         .buttonStyle(.plain)
         .help(appState.isListening ? "Stop listening" : "Start voice input")
-    }
-
-    private var sendButton: some View {
-        Button {
-            appState.submit()
-        } label: {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle().fill(
-                        LinearGradient(
-                            colors: [Color.purple, Color.pink],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
-                )
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.return, modifiers: [])
     }
 
     @ViewBuilder
@@ -622,6 +592,207 @@ struct SiriBleedTint: View {
             .allowsHitTesting(false)
             .opacity(min(0.7, Double(progress)))
         }
+    }
+}
+
+/// Animated nebula that lives inside the input pill while voice mode is
+/// active. It bleeds in from the left edge, sweeps right, and gently
+/// shifts hue over time. Renders absolutely nothing when not active, so
+/// it can't flicker on first panel show.
+struct MicListeningTint: View {
+    let active: Bool
+
+    @State private var enterProgress: CGFloat = 0
+    @State private var exitProgress: CGFloat = 0   // fades out the running tint
+    @State private var shouldRender: Bool = false  // gates rendering entirely
+
+    var body: some View {
+        Group {
+            if shouldRender {
+                tintBody
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear {
+            // Make sure nothing is drawn on first mount.
+            shouldRender = active
+        }
+        .onChange(of: active) { _, isActive in
+            if isActive {
+                shouldRender = true
+                enterProgress = 0
+                exitProgress = 1
+                withAnimation(.easeOut(duration: 0.9)) {
+                    enterProgress = 1.0
+                }
+            } else {
+                withAnimation(.easeIn(duration: 0.25)) {
+                    exitProgress = 0
+                    enterProgress = 0
+                }
+                // Stop rendering after the fade-out completes.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 280_000_000)
+                    if !active { shouldRender = false }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tintBody: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            TimelineView(.animation) { ctx in
+                let t = ctx.date.timeIntervalSinceReferenceDate
+                let hueOffset = t.truncatingRemainder(dividingBy: 24) / 24.0
+                let c1 = Color(hue: (0.78 + hueOffset).truncatingRemainder(dividingBy: 1),
+                               saturation: 0.85, brightness: 1.0)
+                let c2 = Color(hue: (0.62 + hueOffset).truncatingRemainder(dividingBy: 1),
+                               saturation: 0.90, brightness: 1.0)
+                let c3 = Color(hue: (0.45 + hueOffset).truncatingRemainder(dividingBy: 1),
+                               saturation: 0.85, brightness: 1.0)
+
+                ZStack {
+                    NebulaBlob(color: c1,
+                               cx: 0.12 + 0.10 * sin(t * 0.55),
+                               cy: 0.50 + 0.16 * cos(t * 0.40),
+                               sizeFactor: 0.55,
+                               alpha: 0.55,
+                               w: w, h: h)
+                    NebulaBlob(color: c2,
+                               cx: 0.32 + 0.10 * cos(t * 0.45 + 1.1),
+                               cy: 0.55 + 0.15 * sin(t * 0.50 + 0.6),
+                               sizeFactor: 0.50,
+                               alpha: 0.50,
+                               w: w, h: h)
+                    NebulaBlob(color: c3,
+                               cx: 0.55 + 0.12 * sin(t * 0.35 + 2.0),
+                               cy: 0.50 + 0.20 * cos(t * 0.45 + 1.3),
+                               sizeFactor: 0.55,
+                               alpha: 0.45,
+                               w: w, h: h)
+                }
+                .compositingGroup()
+                .blur(radius: 20)
+                .drawingGroup(opaque: false)
+                .blendMode(.plusLighter)
+            }
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0.0),
+                        .init(color: .white, location: max(0.0, enterProgress - 0.15)),
+                        .init(color: .white.opacity(0.0), location: enterProgress)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(Capsule())
+            .allowsHitTesting(false)
+            .opacity(Double(exitProgress))
+        }
+    }
+}
+
+/// Nebula tint for the response card. Same hue-cycling blob palette as
+/// MicListeningTint, but the reveal mask bleeds in from the top edge
+/// downward, growing as `progress` goes 0 → 1.
+struct ResponseBleedTint: View {
+    let progress: CGFloat
+    let cornerRadius: CGFloat
+
+    @State private var shouldRender: Bool = false
+
+    var body: some View {
+        Group {
+            if shouldRender || progress > 0 {
+                tintBody
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear { shouldRender = progress > 0 }
+        .onChange(of: progress) { _, p in
+            if p > 0 {
+                shouldRender = true
+            } else {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 280_000_000)
+                    if progress == 0 { shouldRender = false }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tintBody: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            TimelineView(.animation) { ctx in
+                let t = ctx.date.timeIntervalSinceReferenceDate
+                let hueOffset = t.truncatingRemainder(dividingBy: 24) / 24.0
+                let c1 = Color(hue: (0.78 + hueOffset).truncatingRemainder(dividingBy: 1),
+                               saturation: 0.85, brightness: 1.0)
+                let c2 = Color(hue: (0.62 + hueOffset).truncatingRemainder(dividingBy: 1),
+                               saturation: 0.90, brightness: 1.0)
+                let c3 = Color(hue: (0.45 + hueOffset).truncatingRemainder(dividingBy: 1),
+                               saturation: 0.85, brightness: 1.0)
+
+                ZStack {
+                    NebulaBlob(color: c1,
+                               cx: 0.30 + 0.10 * sin(t * 0.55),
+                               cy: 0.18 + 0.10 * cos(t * 0.40),
+                               sizeFactor: 0.85,
+                               alpha: 0.45,
+                               w: w, h: h)
+                    NebulaBlob(color: c2,
+                               cx: 0.65 + 0.10 * cos(t * 0.45 + 1.1),
+                               cy: 0.22 + 0.10 * sin(t * 0.50 + 0.6),
+                               sizeFactor: 0.80,
+                               alpha: 0.42,
+                               w: w, h: h)
+                    NebulaBlob(color: c3,
+                               cx: 0.50 + 0.12 * sin(t * 0.35 + 2.0),
+                               cy: 0.12 + 0.08 * cos(t * 0.45 + 1.3),
+                               sizeFactor: 0.90,
+                               alpha: 0.38,
+                               w: w, h: h)
+                }
+                .compositingGroup()
+                .blur(radius: 22)
+                .drawingGroup(opaque: false)
+                .blendMode(.plusLighter)
+            }
+            // Circular reveal expanding from the top center. The circle
+            // has to be big enough at progress=1 to fully cover the card
+            // (corner-to-corner diagonal from the top-center point).
+            .mask(
+                Circle()
+                    .frame(
+                        width: revealDiameter(w: w, h: h) * progress,
+                        height: revealDiameter(w: w, h: h) * progress
+                    )
+                    .position(x: w * 0.5, y: 0)
+                    .blur(radius: 14)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .allowsHitTesting(false)
+            .opacity(min(0.85, Double(progress) + 0.1))
+        }
+    }
+
+    /// Diameter of the reveal circle large enough to cover the card from
+    /// the top-center anchor — i.e. twice the corner distance.
+    private func revealDiameter(w: CGFloat, h: CGFloat) -> CGFloat {
+        let cornerDistance = sqrt((w * 0.5) * (w * 0.5) + h * h)
+        return cornerDistance * 2 * 1.1
     }
 }
 
