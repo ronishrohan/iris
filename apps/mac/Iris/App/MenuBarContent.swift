@@ -6,7 +6,7 @@ struct MenuBarContent: View {
 
     var body: some View {
         Button("Activate Iris") {
-            appState.toggleOrb()
+            appState.togglePanel()
         }
         .keyboardShortcut(.space, modifiers: [.option])
 
@@ -30,10 +30,9 @@ struct MenuBarContent: View {
     private var phaseLabel: String {
         switch appState.phase {
         case .idle: "Idle"
-        case .listening: "Listening…"
         case .thinking: "Thinking…"
         case .toolCalling(let name): "Running tool: \(name)"
-        case .speaking: "Speaking…"
+        case .done: "Done"
         case .error(let msg): "Error: \(msg)"
         }
     }

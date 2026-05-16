@@ -26,7 +26,7 @@ final class GlobalHotkey {
                                            nil,
                                            MemoryLayout<EventHotKeyID>.size,
                                            nil,
-                                           &hkID)
+                                           &hkID) 
             if status == noErr {
                 let mySelf = Unmanaged<GlobalHotkey>.fromOpaque(userData).takeUnretainedValue()
                 DispatchQueue.main.async {
@@ -45,10 +45,5 @@ final class GlobalHotkey {
         if let handlerRef { RemoveEventHandler(handlerRef) }
         hotKeyRef = nil
         handlerRef = nil
-    }
-
-    deinit {
-        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
-        if let handlerRef { RemoveEventHandler(handlerRef) }
     }
 }

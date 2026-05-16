@@ -4,16 +4,13 @@ import Foundation
 final class ConversationOrchestrator {
     private let appState: AppState
     private let registry: ToolRegistry
-    private let tts: NativeTTS
 
     init(appState: AppState) {
         self.appState = appState
         self.registry = ToolRegistry(settings: appState.settings)
-        self.tts = NativeTTS()
     }
 
     func turn(userText: String) async {
-        appState.latestTranscript = userText
         appState.latestResponse = ""
         appState.phase = .thinking
 
@@ -29,7 +26,7 @@ final class ConversationOrchestrator {
 
         var messages: [ChatMessage] = [
             ChatMessage(role: .system,
-                        content: "You are Iris, a concise voice assistant on macOS. Use tools when they help. Keep replies short and conversational; they will be spoken aloud."),
+                        content: "You are Iris, a concise assistant on macOS. Use tools when they help. Keep replies short and clear."),
             ChatMessage(role: .user, content: userText)
         ]
 
@@ -80,10 +77,8 @@ final class ConversationOrchestrator {
                 appState.phase = .toolCalling(name: call.function.name)
                 let result: String
                 do {
-                    let args = try JSONSerialization.jsonObject(
-                        with: Data(call.function.arguments.utf8)) as? [String: Any] ?? [:]
                     if let tool = registry.find(call.function.name) {
-                        result = try await tool.run(arguments: args)
+                        result = try await tool.run(argumentsJSON: call.function.arguments)
                     } else {
                         result = "Unknown tool: \(call.function.name)"
                     }
@@ -101,11 +96,7 @@ final class ConversationOrchestrator {
             return
         }
 
-        appState.phase = .speaking
-        if !assistantText.isEmpty {
-            await tts.speak(assistantText)
-        }
-        appState.phase = .idle
+        appState.phase = .done
     }
 
     private struct PendingToolCall {

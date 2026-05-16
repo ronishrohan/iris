@@ -13,7 +13,8 @@ struct OpenAppTool: Tool {
         "required": AnyCodable(["app_name"])
     ]
 
-    func run(arguments: [String: Any]) async throws -> String {
+    func run(argumentsJSON: String) async throws -> String {
+        let arguments = try parseArguments(argumentsJSON)
         guard let appName = arguments["app_name"] as? String else {
             throw ToolError.invalidArguments
         }

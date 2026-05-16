@@ -12,7 +12,8 @@ struct WebSearchTool: Tool {
         "required": AnyCodable(["query"])
     ]
 
-    func run(arguments: [String: Any]) async throws -> String {
+    func run(argumentsJSON: String) async throws -> String {
+        let arguments = try parseArguments(argumentsJSON)
         guard let query = arguments["query"] as? String, !query.isEmpty else {
             throw ToolError.invalidArguments
         }

@@ -6,21 +6,24 @@ import Observation
 final class AppState {
     enum Phase: Equatable {
         case idle
-        case listening
         case thinking
         case toolCalling(name: String)
-        case speaking
+        case done
         case error(String)
     }
 
     var phase: Phase = .idle
-    var latestTranscript: String = ""
+    var inputText: String = ""
     var latestResponse: String = ""
+
+    /// Bumped each time the panel should animate itself closed. The view
+    /// observes this, plays the exit animation, then calls
+    /// `finishClose()` so the controller can tear down the window.
+    var closeRequestCounter: Int = 0
 
     let settings = AppSettings()
     let orbController: OrbWindowController
     let hotkey = GlobalHotkey()
-    private var stt: AppleSTT?
     private var orchestrator: ConversationOrchestrator?
 
     init() {
@@ -38,56 +41,44 @@ final class AppState {
     private func registerHotkey() {
         hotkey.onTrigger = { [weak self] in
             Task { @MainActor in
-                self?.toggleOrb()
+                self?.togglePanel()
             }
         }
         hotkey.register(keyCode: settings.hotkeyKeyCode, modifiers: settings.hotkeyModifiers)
     }
 
-    func toggleOrb() {
+    func togglePanel() {
         if orbController.isVisible {
-            stopListening()
-            orbController.hide()
-            phase = .idle
+            requestClose()
         } else {
+            phase = .idle
+            inputText = ""
+            latestResponse = ""
             orbController.show(appState: self)
-            startListening()
         }
     }
 
-    private func startListening() {
-        latestTranscript = ""
+    func submit() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         latestResponse = ""
-        phase = .listening
-        let service = AppleSTT()
-        self.stt = service
         Task { [weak self] in
             guard let self else { return }
-            do {
-                try await service.start(
-                    onPartial: { partial in
-                        Task { @MainActor in self.latestTranscript = partial }
-                    },
-                    onFinal: { final in
-                        Task { @MainActor in
-                            self.latestTranscript = final
-                            self.stt?.stop()
-                            self.stt = nil
-                            await self.ensureOrchestrator().turn(userText: final)
-                        }
-                    },
-                    onError: { err in
-                        Task { @MainActor in self.phase = .error(err.localizedDescription) }
-                    }
-                )
-            } catch {
-                await MainActor.run { self.phase = .error(error.localizedDescription) }
-            }
+            await self.ensureOrchestrator().turn(userText: trimmed)
         }
     }
 
-    private func stopListening() {
-        stt?.stop()
-        stt = nil
+    func requestClose() {
+        guard orbController.isVisible else { return }
+        closeRequestCounter += 1
+    }
+
+    func dismiss() { requestClose() }
+
+    func finishClose() {
+        orbController.hide()
+        phase = .idle
+        inputText = ""
+        latestResponse = ""
     }
 }
