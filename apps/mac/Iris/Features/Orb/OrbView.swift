@@ -12,6 +12,7 @@ struct IrisPanelView: View {
     @State private var pulseBrightness: Double = 0.0
     @State private var observedPulseCounter = 0
     @State private var frontCardHeight: CGFloat = 0
+    @State private var listeningPulse: CGFloat = 1.0
 
     var body: some View {
         VStack(spacing: 12) {
@@ -231,14 +232,13 @@ struct IrisPanelView: View {
     @ViewBuilder
     private var inputRow: some View {
         HStack(spacing: 12) {
-            Image(systemName: "eye")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.secondary)
+            micToggle
 
-            TextField("Ask Iris Something", text: Binding(
-                get: { appState.inputText },
-                set: { appState.inputText = $0 }
-            ), axis: .vertical)
+            TextField(appState.isListening ? "Listening…" : "Ask Iris Something",
+                      text: Binding(
+                        get: { appState.inputText },
+                        set: { appState.inputText = $0 }
+                      ), axis: .vertical)
             .textFieldStyle(.plain)
             .font(.system(size: 22, weight: .regular, design: .rounded))
             .foregroundStyle(.primary)
@@ -255,6 +255,39 @@ struct IrisPanelView: View {
         .padding(.vertical, 12)
         .glassEffect(.regular.interactive(), in: .capsule)
         .scaleEffect(pulseScale, anchor: .center)
+    }
+
+    private var micToggle: some View {
+        Button {
+            appState.toggleMic()
+        } label: {
+            ZStack {
+                if appState.isListening {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.purple, .pink],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                        )
+                        .scaleEffect(listeningPulse)
+                        .onAppear { listeningPulse = 1.0 }
+                        .animation(
+                            .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                            value: listeningPulse
+                        )
+                        .task { listeningPulse = 1.15 }
+                } else {
+                    Image(systemName: "mic")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+        .help(appState.isListening ? "Stop listening" : "Start voice input")
     }
 
     private var sendButton: some View {

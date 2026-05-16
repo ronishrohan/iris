@@ -31,14 +31,27 @@ final class AppState {
     /// to play a quick scale + brightness "pulse" so the input feels alive.
     var submitPulseCounter: Int = 0
 
+    /// True while the panel is operating in voice mode (mic listening,
+    /// TTS reply on completion).
+    var voiceMode: Bool = false
+
+    /// True while the dictation engine is actively transcribing.
+    var isListening: Bool = false
+
     let settings = AppSettings()
     let orbController: OrbWindowController
     let hotkey = GlobalHotkey()
+    let wakeWord = WakeWordEngine()
+    let dictation = LiveDictation()
     private var orchestrator: ConversationOrchestrator?
 
     init() {
         self.orbController = OrbWindowController()
         registerHotkey()
+        configureVoice()
+        if settings.wakeWordEnabled {
+            wakeWord.start()
+        }
     }
 
     private func ensureOrchestrator() -> ConversationOrchestrator {
@@ -55,6 +68,80 @@ final class AppState {
             }
         }
         hotkey.register(keyCode: settings.hotkeyKeyCode, modifiers: settings.hotkeyModifiers)
+    }
+
+    private func configureVoice() {
+        wakeWord.onWake = { [weak self] in
+            Task { @MainActor in self?.handleWakeWord() }
+        }
+        dictation.onPartial = { [weak self] text in
+            self?.inputText = text
+        }
+        dictation.onComplete = { [weak self] text in
+            guard let self else { return }
+            self.inputText = text
+            self.isListening = false
+            self.submit()
+        }
+        dictation.onError = { [weak self] _ in
+            self?.isListening = false
+        }
+    }
+
+    private func handleWakeWord() {
+        // Already showing? Just kick dictation back on.
+        if orbController.isShown && !orbController.isClosing {
+            startDictation()
+            return
+        }
+        if orbController.isShown { orbController.hide() }
+        phase = .idle
+        inputText = ""
+        latestResponse = ""
+        voiceMode = true
+        orbController.show(appState: self)
+        startDictation()
+    }
+
+    func toggleMic() {
+        if isListening {
+            voiceMode = false
+            stopDictation(cancel: true)
+        } else {
+            voiceMode = true
+            startDictation()
+        }
+    }
+
+    private func startDictation() {
+        // Pause wake word so we don't pick up our own input.
+        wakeWord.pause()
+        VoiceOut.shared.stop()
+        Task { @MainActor in
+            let ok = await LiveDictation.requestAuthorization()
+            guard ok else {
+                isListening = false
+                phase = .error("Microphone or speech permission denied.")
+                return
+            }
+            do {
+                try dictation.start()
+                isListening = true
+            } catch {
+                isListening = false
+                phase = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    private func stopDictation(cancel: Bool) {
+        if cancel { dictation.cancel() } else { dictation.stop() }
+        isListening = false
+        // Resume wake-word listening only if the panel is closing or
+        // the user explicitly turned voice mode off.
+        if !orbController.isShown || !voiceMode {
+            if settings.wakeWordEnabled { wakeWord.resume() }
+        }
     }
 
     func togglePanel() {
@@ -79,6 +166,9 @@ final class AppState {
     func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // If we were listening, stop the mic now — we have the query.
+        if isListening { stopDictation(cancel: false) }
+        VoiceOut.shared.stop()
         // Push the currently-visible response onto the stack BEFORE we
         // wipe latestResponse, so the previous answer stays on screen as
         // a card behind the incoming new one.
@@ -88,9 +178,13 @@ final class AppState {
         inputText = ""
         latestResponse = ""
         submitPulseCounter += 1
+        let shouldSpeak = voiceMode
         Task { [weak self] in
             guard let self else { return }
             await self.ensureOrchestrator().turn(userText: trimmed)
+            if shouldSpeak, !self.latestResponse.isEmpty {
+                VoiceOut.shared.speak(self.latestResponse)
+            }
         }
     }
 
@@ -126,6 +220,20 @@ final class AppState {
         inputText = ""
         latestResponse = ""
         pastResponses.removeAll()
+        if isListening { dictation.cancel() }
+        isListening = false
+        voiceMode = false
+        VoiceOut.shared.stop()
+        if settings.wakeWordEnabled { wakeWord.resume() }
         orchestrator?.resetSession()
+    }
+
+    /// Called from Settings when the user flips the wake-word checkbox.
+    func applyWakeWordSetting() {
+        if settings.wakeWordEnabled {
+            wakeWord.start()
+        } else {
+            wakeWord.stop()
+        }
     }
 }

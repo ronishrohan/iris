@@ -32,6 +32,13 @@ final class AppSettings {
         set { defaults.set(Int(newValue), forKey: K.hotkeyModifiers) }
     }
 
+    /// Whether the "Hey Iris" wake-word engine should run while the
+    /// app is open. Defaults to on.
+    var wakeWordEnabled: Bool {
+        get { (defaults.object(forKey: K.wakeWordEnabled) as? Bool) ?? true }
+        set { defaults.set(newValue, forKey: K.wakeWordEnabled) }
+    }
+
     func isToolEnabled(_ name: String) -> Bool {
         let key = "tool.\(name).enabled"
         return (defaults.object(forKey: key) as? Bool) ?? true
@@ -46,5 +53,6 @@ final class AppSettings {
         static let defaultModel = "defaultModel"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
+        static let wakeWordEnabled = "wakeWordEnabled"
     }
 }

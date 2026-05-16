@@ -28,6 +28,18 @@ private struct GeneralSettingsView: View {
                 Text("Global hotkey: ⌥-Space.")
                     .foregroundStyle(.secondary)
             }
+            Section("Voice") {
+                Toggle("Listen for \u{201C}Hey Iris\u{201D}", isOn: Binding(
+                    get: { appState.settings.wakeWordEnabled },
+                    set: { v in
+                        appState.settings.wakeWordEnabled = v
+                        appState.applyWakeWordSetting()
+                    }
+                ))
+                Text("Iris uses the microphone in the background to detect the wake phrase. Speech recognition runs on device.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }
