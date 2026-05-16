@@ -7,16 +7,23 @@ struct CalculationCard: View {
 
     var body: some View {
         CardChrome(onOpen: nil) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(data.expression)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "equal.square")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(data.expression)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
                 Text(data.result)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(size: 36, weight: .light, design: .rounded))
+                    .monospacedDigit()
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                    .minimumScaleFactor(0.5)
             }
         }
     }
@@ -29,26 +36,32 @@ struct WorldClockCard: View {
 
     var body: some View {
         CardChrome(onOpen: { CardDeepLink.openApp(bundleID: "com.apple.clock") }) {
-            HStack(alignment: .center, spacing: 14) {
-                Image(systemName: data.isDaytime ? "sun.max.fill" : "moon.stars.fill")
-                    .symbolRenderingMode(.multicolor)
-                    .font(.system(size: 28))
-                    .frame(width: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(data.city)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: data.isDaytime ? "sun.max.fill" : "moon.stars.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.primary)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(data.city.uppercased())
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
+                        .tracking(0.4)
+                        .lineLimit(1)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(data.timeText)
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.system(size: 40, weight: .thin, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                     if let d = data.dateText {
                         Text(d)
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 8)
             }
         }
     }

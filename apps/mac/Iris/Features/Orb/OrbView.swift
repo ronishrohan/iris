@@ -171,19 +171,32 @@ struct IrisPanelView: View {
 
     private var frontResponseCard: some View {
         GlassEffectContainer(spacing: 14) {
-            responseView
-                .background(
-                    ResponseBleedTint(progress: tintProgress, cornerRadius: 20)
-                )
-                .background(
-                    Color.black.opacity(0.24),
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                )
-                .glassEffect(.regular, in: .rect(cornerRadius: 20))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                )
+            Group {
+                if responseShowsOnlyCard {
+                    // Each card owns its own dark-glass container now,
+                    // so when a card is the only thing showing we let
+                    // it stand alone — no outer chrome, no double
+                    // border. The Siri bleed still sits behind it.
+                    responseView
+                        .background(
+                            ResponseBleedTint(progress: tintProgress, cornerRadius: 18)
+                        )
+                } else {
+                    responseView
+                        .background(
+                            ResponseBleedTint(progress: tintProgress, cornerRadius: 20)
+                        )
+                        .background(
+                            Color.black.opacity(0.24),
+                            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        )
+                        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        )
+                }
+            }
         }
         .transition(
             .asymmetric(
@@ -377,8 +390,8 @@ struct IrisPanelView: View {
                 }
             }
         }
-        .padding(.horizontal, responseShowsOnlyCard ? 4 : 16)
-        .padding(.vertical, responseShowsOnlyCard ? 4 : 12)
+        .padding(.horizontal, responseShowsOnlyCard ? 0 : 16)
+        .padding(.vertical, responseShowsOnlyCard ? 0 : 12)
     }
 
     private var workingLabel: String {

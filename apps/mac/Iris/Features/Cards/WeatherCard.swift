@@ -5,31 +5,55 @@ struct WeatherCard: View {
 
     var body: some View {
         CardChrome(onOpen: { CardDeepLink.openApp(bundleID: "com.apple.weather") }) {
-            HStack(alignment: .center, spacing: 16) {
-                Image(systemName: data.conditionSymbol)
-                    .symbolRenderingMode(.multicolor)
-                    .font(.system(size: 38))
-                    .frame(width: 50)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(data.city)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+            VStack(alignment: .leading, spacing: 12) {
+                // Top row: city tag.
+                HStack(spacing: 6) {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
+                    Text(data.city.uppercased())
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.4)
                         .lineLimit(1)
-                    Text(data.temperatureText)
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                }
+
+                // Hero row: glyph + temperature side-by-side.
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    Image(systemName: data.conditionSymbol)
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.primary)
+                        .font(.system(size: 44, weight: .light))
+                        .frame(width: 50, alignment: .leading)
+                    Text(data.temperatureText)
+                        .font(.system(size: 56, weight: .thin, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Spacer(minLength: 0)
+                }
+
+                // Bottom row: condition summary + high/low chip.
+                HStack(spacing: 8) {
                     if let s = data.summary, !s.isEmpty {
                         Text(s)
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(.primary.opacity(0.85))
                             .lineLimit(1)
                     }
-                }
-                Spacer(minLength: 8)
-                if let hl = data.highLowText {
-                    Text(hl)
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    if let hl = data.highLowText {
+                        Text(hl)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                    }
                 }
             }
         }

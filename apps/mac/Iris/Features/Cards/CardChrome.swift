@@ -1,10 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// Common rounded-glass surface shared by every tool result card.
-/// Renders the card body and, when an `onOpen` hook is provided, a
-/// dedicated "Open" button along the bottom edge — no hover scale,
-/// no corner chevron, just an obvious button.
+/// Common dark-glass shell shared by every tool result card. Each
+/// card now ships its own container — rounded `.regularMaterial`
+/// pushed dark by a tinted overlay, a thin white hairline border, and
+/// (when the card can be deep-linked) a small `Open` action pinned to
+/// the top-right corner of the card body. No bottom action row.
 struct CardChrome<Content: View>: View {
     let onOpen: (() -> Void)?
     let openLabel: String
@@ -18,25 +19,42 @@ struct CardChrome<Content: View>: View {
         self.content = content
     }
 
+    private var cornerRadius: CGFloat { 18 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: onOpen == nil ? 0 : 10) {
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if let onOpen {
-                HStack {
-                    Spacer()
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Leave room at the top-right for the Open chip so it
+            // never crowds the card's own content.
+            .padding(.trailing, onOpen == nil ? 14 : 64)
+            .padding(.leading, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.black.opacity(0.42))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
+            )
+            .overlay(alignment: .topTrailing) {
+                if let onOpen {
                     CardOpenButton(label: openLabel, action: onOpen)
+                        .padding(.top, 10)
+                        .padding(.trailing, 10)
                 }
             }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
-/// Simple pill button used by every card that deep-links into a
-/// system app. Looks like a small native control, no glass / no scale
-/// trickery.
+/// Small pill button anchored in the card's top-right corner. Quiet
+/// black-glass surface so it reads as a secondary action, not as the
+/// card's primary content.
 struct CardOpenButton: View {
     let label: String
     let action: () -> Void
@@ -46,21 +64,17 @@ struct CardOpenButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary.opacity(hovering ? 1.0 : 0.85))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(.regularMaterial)
-                )
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.black.opacity(hovering ? 0.45 : 0.35))
+                    Capsule(style: .continuous)
+                        .fill(Color.black.opacity(hovering ? 0.55 : 0.40))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Color.white.opacity(hovering ? 0.14 : 0.08),
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.white.opacity(hovering ? 0.18 : 0.10),
                                       lineWidth: 1)
                 )
         }
