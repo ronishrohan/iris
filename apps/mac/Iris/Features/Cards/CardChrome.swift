@@ -52,11 +52,15 @@ struct CardOpenButton: View {
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(.thickMaterial)
+                        .fill(.regularMaterial)
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.black.opacity(hovering ? 0.45 : 0.35))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(hovering ? 0.18 : 0.08),
+                        .strokeBorder(Color.white.opacity(hovering ? 0.14 : 0.08),
                                       lineWidth: 1)
                 )
         }

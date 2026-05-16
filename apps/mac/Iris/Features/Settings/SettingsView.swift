@@ -102,7 +102,7 @@ private struct AboutSettingsView: View {
         VStack(spacing: 8) {
             Image(systemName: "waveform.circle.fill")
                 .font(.system(size: 56))
-                .foregroundStyle(.purple, .pink)
+                .foregroundStyle(.primary, .secondary)
             Text("Iris").font(.title2).bold()
             Text("v0.1.0-poc").foregroundStyle(.secondary)
             Text("A SwiftUI Siri replacement — proof of concept.")

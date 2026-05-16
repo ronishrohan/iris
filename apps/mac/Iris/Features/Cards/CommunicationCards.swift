@@ -10,13 +10,11 @@ struct MusicCard: View {
             HStack(alignment: .center, spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(LinearGradient(colors: [.pink, .purple],
-                                             startPoint: .topLeading,
-                                             endPoint: .bottomTrailing))
+                        .fill(Color.white.opacity(0.16))
                         .frame(width: 44, height: 44)
                     Image(systemName: "music.note")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(data.action)
@@ -55,12 +53,11 @@ struct ContactCard: View {
             HStack(alignment: .center, spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(LinearGradient(colors: [.blue, .indigo],
-                                             startPoint: .top, endPoint: .bottom))
+                        .fill(Color.white.opacity(0.16))
                         .frame(width: 44, height: 44)
                     Text(data.initials)
                         .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(data.name)
@@ -106,11 +103,11 @@ struct MessageSentCard: View {
             HStack(alignment: .top, spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(Color.green)
+                        .fill(Color.white.opacity(0.16))
                         .frame(width: 36, height: 36)
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -145,11 +142,11 @@ struct EmailSentCard: View {
             HStack(alignment: .top, spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(Color.blue)
+                        .fill(Color.white.opacity(0.16))
                         .frame(width: 36, height: 36)
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {

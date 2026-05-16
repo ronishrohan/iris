@@ -64,11 +64,11 @@ struct NoteCard: View {
             HStack(alignment: .top, spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.yellow.opacity(0.85))
+                        .fill(Color.white.opacity(0.16))
                         .frame(width: 32, height: 38)
                     Image(systemName: "note.text")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.black.opacity(0.7))
+                        .foregroundStyle(.primary)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Saved to Notes")

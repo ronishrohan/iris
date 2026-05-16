@@ -175,7 +175,15 @@ struct IrisPanelView: View {
                 .background(
                     ResponseBleedTint(progress: tintProgress, cornerRadius: 20)
                 )
+                .background(
+                    Color.black.opacity(0.24),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                )
                 .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
         }
         .transition(
             .asymmetric(
@@ -213,9 +221,13 @@ struct IrisPanelView: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(.regularMaterial)
             )
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.black.opacity(0.24))
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .scaleEffect(scale, anchor: .top)
@@ -259,18 +271,23 @@ struct IrisPanelView: View {
         .padding(.leading, 7)
         .padding(.trailing, 18)
         .padding(.vertical, 7)
-        // Listening nebula: bleeds in from the left of the input pill,
-        // sweeps right while gently shifting hues. Speed reacts to the
-        // current mic amplitude. We keep it active while the user is in
-        // voice mode (not just while the dictation engine is up) so it
-        // doesn't blink off between turns.
+        // Listening nebula: shader-driven semi-transparent black smoke
+        // with sparse warm clusters, masked into the leading edge of
+        // the pill while voice mode is active.
         .background(
             MicListeningTint(
                 active: appState.voiceMode || appState.isListening,
                 amplitude: appState.micAmplitude
             )
         )
+        // Black tint between content and glass to push the pill toward
+        // a dark frosted look regardless of what's behind the panel.
+        .background(Color.black.opacity(0.22), in: Capsule())
         .glassEffect(.regular.interactive(), in: .capsule)
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+        )
         .scaleEffect(pulseScale, anchor: .center)
     }
 
@@ -293,15 +310,16 @@ struct IrisPanelView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(
                     appState.isListening
-                        ? AnyShapeStyle(LinearGradient(
-                            colors: [.purple, .pink],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        ))
+                        ? AnyShapeStyle(Color.white)
                         : AnyShapeStyle(.secondary)
                 )
                 .frame(width: 36, height: 36)
                 .contentShape(Circle())
                 .glassEffect(.regular.interactive(), in: .circle)
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
                 .animation(.easeInOut(duration: 0.2), value: appState.isListening)
         }
         .buttonStyle(.plain)
@@ -597,98 +615,32 @@ private struct FrontCardHeightKey: PreferenceKey {
     }
 }
 
-// MARK: - Siri-style bleed tint
+// MARK: - Legacy bleed tint (unused)
 
-/// Colored tint that "bleeds" into the response card from the top —
-/// matches the effect macOS Siri uses when its answer arrives. A circular
-/// mask anchored at the top expands outward; the mask edge is feathered
-/// (`.blur`) so it looks soft. The tint itself is a nebula of overlapping
-/// radial-gradient blobs that drift slowly so it never looks like a flat
-/// gradient. The whole thing is clipped to the same rounded rect as the
-/// host card so it can't bleed outside the corner radius.
+/// Retained as a thin wrapper around the live `ResponseBleedTint` /
+/// `NebulaView` for backwards compatibility with anything that might
+/// still reference the name. New code should call `ResponseBleedTint`
+/// directly.
 struct SiriBleedTint: View {
     let progress: CGFloat
     let cornerRadius: CGFloat
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            // Radius large enough to fully cover at progress = 1.
-            let maxRadius = sqrt(w * w + h * h) * 1.1
-            let radius = max(0.0001, maxRadius * progress)
-
-            TimelineView(.animation) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate
-                ZStack {
-                    NebulaBlob(color: Color(red: 0.20, green: 0.78, blue: 0.62), // teal-green
-                               cx: 0.28 + 0.05 * sin(t * 0.45),
-                               cy: 0.30 + 0.04 * cos(t * 0.55),
-                               sizeFactor: 0.95,
-                               alpha: 0.28,
-                               w: w, h: h)
-                    NebulaBlob(color: Color(red: 0.25, green: 0.55, blue: 0.95), // royal blue
-                               cx: 0.72 + 0.06 * cos(t * 0.35),
-                               cy: 0.35 + 0.05 * sin(t * 0.50),
-                               sizeFactor: 0.90,
-                               alpha: 0.26,
-                               w: w, h: h)
-                    NebulaBlob(color: Color(red: 0.20, green: 0.70, blue: 1.00), // sky blue
-                               cx: 0.45 + 0.08 * sin(t * 0.55 + 1.3),
-                               cy: 0.70 + 0.05 * cos(t * 0.40 + 0.7),
-                               sizeFactor: 1.05,
-                               alpha: 0.24,
-                               w: w, h: h)
-                    NebulaBlob(color: Color(red: 0.40, green: 0.85, blue: 0.55), // mint
-                               cx: 0.20 + 0.06 * cos(t * 0.30 + 0.4),
-                               cy: 0.78 + 0.04 * sin(t * 0.45 + 1.1),
-                               sizeFactor: 0.80,
-                               alpha: 0.22,
-                               w: w, h: h)
-                    NebulaBlob(color: Color(red: 0.30, green: 0.65, blue: 0.80), // cyan-teal
-                               cx: 0.85 + 0.05 * sin(t * 0.40 + 2.1),
-                               cy: 0.65 + 0.05 * cos(t * 0.35 + 1.6),
-                               sizeFactor: 0.75,
-                               alpha: 0.20,
-                               w: w, h: h)
-                }
-                .blur(radius: 22)
-                .blendMode(.plusLighter)
-            }
-            .mask(
-                Circle()
-                    .frame(width: radius * 2, height: radius * 2)
-                    .position(x: w * 0.5, y: 0)
-                    .blur(radius: 14)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .allowsHitTesting(false)
-            .opacity(min(0.7, Double(progress)))
-        }
+        ResponseBleedTint(progress: progress, cornerRadius: cornerRadius)
     }
 }
 
-/// Animated nebula that lives inside the input pill while voice mode is
-/// active. It bleeds in from the left edge, sweeps right, and gently
-/// shifts hue over time. Renders absolutely nothing when not active, so
-/// it can't flicker on first panel show.
-///
-/// `amplitude` (0...1, smoothed mic level) accelerates the underlying
-/// drift so the nebula visibly reacts to the user's voice: a quiet idle
-/// state breathes; loud speech sweeps faster.
+/// Listening tint for the input pill. Wraps the Metal-shader
+/// `NebulaView` in a left-to-right reveal mask + capsule clip, fades
+/// in / out with `active`, and scales the shader intensity by mic
+/// amplitude.
 struct MicListeningTint: View {
     let active: Bool
     let amplitude: Float
 
     @State private var enterProgress: CGFloat = 0
-    @State private var exitProgress: CGFloat = 0   // fades out the running tint
-    @State private var shouldRender: Bool = false  // gates rendering entirely
-    /// Integrated "voice phase" — we advance this instead of relying on
-    /// the wall-clock so the perceived animation speed actually scales
-    /// with `amplitude`. Lives in @State so it persists across
-    /// TimelineView ticks.
-    @State private var voicePhase: Double = 0
-    @State private var lastTick: Date = .now
+    @State private var exitProgress: CGFloat = 0
+    @State private var shouldRender: Bool = false
 
     var body: some View {
         Group {
@@ -707,9 +659,6 @@ struct MicListeningTint: View {
                 shouldRender = true
                 enterProgress = 0
                 exitProgress = 1
-                // Restart the phase clock so dt doesn't include the gap
-                // since the tint was last visible.
-                lastTick = .now
                 withAnimation(.easeOut(duration: 0.9)) {
                     enterProgress = 1.0
                 }
@@ -727,63 +676,13 @@ struct MicListeningTint: View {
         }
     }
 
-    /// Advance the voice-driven phase and return the value to render at
-    /// for this tick. Schedules the @State update via DispatchQueue so
-    /// we don't mutate state inside a view body.
-    private func advanceVoicePhase(now: Date) -> Double {
-        let amp = max(0, min(1, Double(amplitude)))
-        let speed = 1.0 + amp * 5.0
-        let dt = now.timeIntervalSince(lastTick)
-        let safeDt = min(max(0, dt), 0.1)
-        let next = voicePhase + safeDt * speed
-        DispatchQueue.main.async {
-            voicePhase = next
-            lastTick = now
-        }
-        return next
-    }
-
     @ViewBuilder
     private var tintBody: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-
-            TimelineView(.animation) { ctx in
-                let t = advanceVoicePhase(now: ctx.date)
-                let hueOffset = t.truncatingRemainder(dividingBy: 24) / 24.0
-                let c1 = Color(hue: (0.78 + hueOffset).truncatingRemainder(dividingBy: 1),
-                               saturation: 0.85, brightness: 1.0)
-                let c2 = Color(hue: (0.62 + hueOffset).truncatingRemainder(dividingBy: 1),
-                               saturation: 0.90, brightness: 1.0)
-                let c3 = Color(hue: (0.45 + hueOffset).truncatingRemainder(dividingBy: 1),
-                               saturation: 0.85, brightness: 1.0)
-
-                ZStack {
-                    NebulaBlob(color: c1,
-                               cx: 0.12 + 0.10 * sin(t * 0.55),
-                               cy: 0.50 + 0.16 * cos(t * 0.40),
-                               sizeFactor: 0.55,
-                               alpha: 0.55,
-                               w: w, h: h)
-                    NebulaBlob(color: c2,
-                               cx: 0.32 + 0.10 * cos(t * 0.45 + 1.1),
-                               cy: 0.55 + 0.15 * sin(t * 0.50 + 0.6),
-                               sizeFactor: 0.50,
-                               alpha: 0.50,
-                               w: w, h: h)
-                    NebulaBlob(color: c3,
-                               cx: 0.55 + 0.12 * sin(t * 0.35 + 2.0),
-                               cy: 0.50 + 0.20 * cos(t * 0.45 + 1.3),
-                               sizeFactor: 0.55,
-                               alpha: 0.45,
-                               w: w, h: h)
-                }
-                .compositingGroup()
-                .blur(radius: 20)
-                .drawingGroup(opaque: false)
-                .blendMode(.plusLighter)
-            }
+        // Idle mic still gets a low baseline so the nebula is visible
+        // but doesn't churn. Voice loudness pushes intensity up.
+        let amp = max(0, min(1, Double(amplitude)))
+        let intensity = Float(0.55 + amp * 0.45)
+        NebulaView(intensity: intensity)
             .mask(
                 LinearGradient(
                     stops: [
@@ -798,13 +697,12 @@ struct MicListeningTint: View {
             .clipShape(Capsule())
             .allowsHitTesting(false)
             .opacity(Double(exitProgress))
-        }
     }
 }
 
-/// Nebula tint for the response card. Same hue-cycling blob palette as
-/// MicListeningTint, but the reveal mask bleeds in from the top edge
-/// downward, growing as `progress` goes 0 → 1.
+/// Nebula tint for the response card. Uses the same Metal shader as
+/// `MicListeningTint` but the reveal mask is an expanding circle that
+/// bleeds in from the top edge as `progress` goes 0 → 1.
 struct ResponseBleedTint: View {
     let progress: CGFloat
     let cornerRadius: CGFloat
@@ -837,57 +735,19 @@ struct ResponseBleedTint: View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-
-            TimelineView(.animation) { ctx in
-                let t = ctx.date.timeIntervalSinceReferenceDate
-                let hueOffset = t.truncatingRemainder(dividingBy: 24) / 24.0
-                let c1 = Color(hue: (0.78 + hueOffset).truncatingRemainder(dividingBy: 1),
-                               saturation: 0.85, brightness: 1.0)
-                let c2 = Color(hue: (0.62 + hueOffset).truncatingRemainder(dividingBy: 1),
-                               saturation: 0.90, brightness: 1.0)
-                let c3 = Color(hue: (0.45 + hueOffset).truncatingRemainder(dividingBy: 1),
-                               saturation: 0.85, brightness: 1.0)
-
-                ZStack {
-                    NebulaBlob(color: c1,
-                               cx: 0.30 + 0.10 * sin(t * 0.55),
-                               cy: 0.18 + 0.10 * cos(t * 0.40),
-                               sizeFactor: 0.85,
-                               alpha: 0.45,
-                               w: w, h: h)
-                    NebulaBlob(color: c2,
-                               cx: 0.65 + 0.10 * cos(t * 0.45 + 1.1),
-                               cy: 0.22 + 0.10 * sin(t * 0.50 + 0.6),
-                               sizeFactor: 0.80,
-                               alpha: 0.42,
-                               w: w, h: h)
-                    NebulaBlob(color: c3,
-                               cx: 0.50 + 0.12 * sin(t * 0.35 + 2.0),
-                               cy: 0.12 + 0.08 * cos(t * 0.45 + 1.3),
-                               sizeFactor: 0.90,
-                               alpha: 0.38,
-                               w: w, h: h)
-                }
-                .compositingGroup()
-                .blur(radius: 22)
-                .drawingGroup(opaque: false)
-                .blendMode(.plusLighter)
-            }
-            // Circular reveal expanding from the top center. The circle
-            // has to be big enough at progress=1 to fully cover the card
-            // (corner-to-corner diagonal from the top-center point).
-            .mask(
-                Circle()
-                    .frame(
-                        width: revealDiameter(w: w, h: h) * progress,
-                        height: revealDiameter(w: w, h: h) * progress
-                    )
-                    .position(x: w * 0.5, y: 0)
-                    .blur(radius: 14)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .allowsHitTesting(false)
-            .opacity(min(0.85, Double(progress) + 0.1))
+            NebulaView(intensity: 1.0)
+                .mask(
+                    Circle()
+                        .frame(
+                            width: revealDiameter(w: w, h: h) * progress,
+                            height: revealDiameter(w: w, h: h) * progress
+                        )
+                        .position(x: w * 0.5, y: 0)
+                        .blur(radius: 14)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .allowsHitTesting(false)
+                .opacity(min(0.95, Double(progress) + 0.1))
         }
     }
 
@@ -896,29 +756,5 @@ struct ResponseBleedTint: View {
     private func revealDiameter(w: CGFloat, h: CGFloat) -> CGFloat {
         let cornerDistance = sqrt((w * 0.5) * (w * 0.5) + h * h)
         return cornerDistance * 2 * 1.1
-    }
-}
-
-private struct NebulaBlob: View {
-    let color: Color
-    let cx: Double
-    let cy: Double
-    let sizeFactor: Double
-    let alpha: Double
-    let w: CGFloat
-    let h: CGFloat
-
-    var body: some View {
-        let radius = max(w, h) * CGFloat(sizeFactor)
-        return RadialGradient(
-            gradient: Gradient(stops: [
-                .init(color: color.opacity(alpha), location: 0.0),
-                .init(color: color.opacity(alpha * 0.55), location: 0.4),
-                .init(color: color.opacity(0.0), location: 1.0)
-            ]),
-            center: UnitPoint(x: cx, y: cy),
-            startRadius: 0,
-            endRadius: radius
-        )
     }
 }

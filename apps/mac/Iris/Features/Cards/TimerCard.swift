@@ -37,10 +37,7 @@ struct TimerCard: View {
                 Circle()
                     .trim(from: 0, to: CGFloat(f))
                     .stroke(
-                        AngularGradient(
-                            colors: [.orange, .red, .orange],
-                            center: .center
-                        ),
+                        Color.white.opacity(0.95),
                         style: StrokeStyle(lineWidth: 4, lineCap: .round)
                     )
                     .frame(width: 44, height: 44)
@@ -49,7 +46,7 @@ struct TimerCard: View {
             }
             Image(systemName: "timer")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(.primary)
         }
     }
 
