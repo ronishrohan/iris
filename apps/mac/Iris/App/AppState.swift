@@ -123,6 +123,14 @@ final class AppState {
         }
     }
 
+    /// Called from the orchestrator when the LLM invokes end_session
+    /// with action="stop_voice". Turns off voice mode but leaves the
+    /// panel up so the user can read the final response.
+    func stopVoiceOnly() {
+        voiceMode = false
+        if isListening { stopDictation(cancel: true) }
+    }
+
     private func startDictation() {
         // Pause wake word so we don't pick up our own input.
         wakeWord.pause()
@@ -192,9 +200,25 @@ final class AppState {
         inputText = ""
         latestResponse = ""
         submitPulseCounter += 1
+        // Capture voice intent now; the orchestrator may flip it off
+        // mid-turn if the LLM calls end_session.
+        let submittedFromVoice = voiceMode
         Task { [weak self] in
             guard let self else { return }
             await self.ensureOrchestrator().turn(userText: trimmed)
+            // Re-arm voice ONLY if we started in voice mode AND the LLM
+            // didn't end the session AND the panel is still open.
+            guard submittedFromVoice,
+                  self.voiceMode,
+                  self.orbController.isShown,
+                  !self.orbController.isClosing else { return }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            // Re-check after the sleep — could have closed or stopped
+            // voice in the meantime (e.g. user clicked the mic button).
+            guard self.voiceMode,
+                  self.orbController.isShown,
+                  !self.orbController.isClosing else { return }
+            self.startDictation()
         }
     }
 

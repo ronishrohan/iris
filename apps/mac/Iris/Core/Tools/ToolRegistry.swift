@@ -35,7 +35,10 @@ final class ToolRegistry {
         LookupContactTool(),
 
         // Media
-        MusicControlTool()
+        MusicControlTool(),
+
+        // Session control
+        EndSessionTool()
     ]
 
     private let settings: AppSettings

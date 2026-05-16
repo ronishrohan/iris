@@ -14,6 +14,15 @@ final class ConversationOrchestrator {
         You are Iris, a concise assistant on macOS. Use tools when they help. \
         Keep replies short and clear. The user is talking to you through a \
         small floating panel, so favor brevity over verbosity.
+
+        Ending the session: if the user clearly signals they're done — \
+        \"thanks\", \"that's it\", \"done\", \"goodbye\", \"never mind\", \
+        \"okay cool\", \"that'll be all\", \"forget it\", or any sign-off that \
+        isn't a new question — call the `end_session` tool. \
+        Use action=\"close\" by default. Use action=\"stop_voice\" only if the \
+        user explicitly says something like \"stop listening\" or \"turn off the \
+        mic\" but wants to keep reading. Don't end the session prematurely if \
+        the user might still want a follow-up answer.
         """
     )
 
@@ -122,7 +131,7 @@ final class ConversationOrchestrator {
 
             for call in toolCalls {
                 appState.phase = .toolCalling(name: call.function.name)
-                let result: String
+                var result: String
                 do {
                     if let tool = registry.find(call.function.name) {
                         result = try await tool.run(argumentsJSON: call.function.arguments)
@@ -134,6 +143,15 @@ final class ConversationOrchestrator {
                 } catch {
                     result = "Error: \(error.localizedDescription)"
                     anyToolFailed = true
+                }
+                // EndSessionTool emits a sentinel; act on it locally so
+                // the panel actually closes or voice stops. We still
+                // return a normal-looking tool result to the model so it
+                // can wrap up cleanly.
+                if result.hasPrefix(EndSessionTool.sentinelPrefix) {
+                    let action = String(result.dropFirst(EndSessionTool.sentinelPrefix.count))
+                    handleEndSession(action: action)
+                    result = "Session ended."
                 }
                 messages.append(ChatMessage(role: .tool,
                                             content: result,
@@ -158,5 +176,19 @@ final class ConversationOrchestrator {
         var id: String = ""
         var name: String = ""
         var arguments: String = ""
+    }
+
+    private func handleEndSession(action: String) {
+        switch action {
+        case "stop_voice":
+            appState.stopVoiceOnly()
+        default:
+            // Brief delay so the user can see the assistant's closing
+            // message before the panel disappears.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                appState.dismiss()
+            }
+        }
     }
 }
