@@ -89,4 +89,52 @@ struct WebSearchTool: Tool {
         }
         return parts.joined(separator: "\n")
     }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
+        let arguments = try parseArguments(argumentsJSON)
+        guard let query = arguments["query"] as? String, !query.isEmpty else {
+            throw ToolError.invalidArguments
+        }
+        let text = try await run(argumentsJSON: argumentsJSON)
+        guard !text.hasPrefix("No direct answer") else { return .text(text) }
+
+        // Re-parse the same DDG JSON into structured rows so the card
+        // can render them properly. We hit the API again rather than
+        // try to reverse-engineer the joined string.
+        var comps = URLComponents(string: "https://api.duckduckgo.com/")!
+        comps.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "no_html", value: "1"),
+            URLQueryItem(name: "skip_disambig", value: "1")
+        ]
+        guard let url = comps.url else { return .text(text) }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 10
+        req.setValue("Iris/0.1 (macOS)", forHTTPHeaderField: "User-Agent")
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return .text(text)
+        }
+
+        var rows: [WebResultCardData] = []
+        if let abs = json["AbstractText"] as? String, !abs.isEmpty {
+            rows.append(WebResultCardData(
+                title: (json["Heading"] as? String) ?? query,
+                url: (json["AbstractURL"] as? String) ?? "",
+                snippet: abs
+            ))
+        }
+        if let topics = json["RelatedTopics"] as? [[String: Any]] {
+            for t in topics.prefix(6) {
+                guard let txt = t["Text"] as? String, !txt.isEmpty else { continue }
+                let urlStr = (t["FirstURL"] as? String) ?? ""
+                let title = txt.split(separator: " - ", maxSplits: 1).first.map(String.init) ?? txt
+                let snippet = txt
+                rows.append(WebResultCardData(title: title, url: urlStr, snippet: snippet))
+            }
+        }
+        if rows.isEmpty { return .text(text) }
+        return .rich(text: text, ui: ToolUIResult(kind: .webResults(rows)))
+    }
 }

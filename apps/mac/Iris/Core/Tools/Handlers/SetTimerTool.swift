@@ -17,11 +17,15 @@ struct SetTimerTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         let h = (args["hours"]   as? Double) ?? 0
         let m = (args["minutes"] as? Double) ?? 0
         let s = (args["seconds"] as? Double) ?? 0
-        let label = (args["label"] as? String) ?? "Timer done"
+        let label = (args["label"] as? String) ?? "Timer"
 
         let total = h * 3600 + m * 60 + s
         guard total > 0 else { throw ToolError.invalidArguments }
@@ -37,7 +41,10 @@ struct SetTimerTool: Tool {
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
         try await UNUserNotificationCenter.current().add(req)
 
-        return "Timer set for \(formatDuration(total)) (\(label))."
+        let fireDate = Date().addingTimeInterval(total)
+        let summary = "Timer set for \(formatDuration(total)) (\(label))."
+        let card = TimerCardData(label: label, totalSeconds: total, fireDate: fireDate)
+        return .rich(text: summary, ui: ToolUIResult(kind: .timer(card)))
     }
 
     private func requestAuth() async throws {

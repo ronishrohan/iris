@@ -6,6 +6,13 @@ protocol Tool: Sendable {
     var description: String { get }
     var parameters: [String: AnyCodable] { get }
     func run(argumentsJSON: String) async throws -> String
+
+    /// Opt-in richer variant. Tools that have a structured payload for
+    /// a native-feeling card (reminders, timers, calendar, etc.)
+    /// override this and return `.rich(text:ui:)`. The default
+    /// implementation just wraps the plain-text `run` output, so
+    /// existing tools keep working unchanged.
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult
 }
 
 extension Tool {
@@ -19,5 +26,10 @@ extension Tool {
             return [:]
         }
         return obj
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
+        let text = try await run(argumentsJSON: argumentsJSON)
+        return .text(text)
     }
 }

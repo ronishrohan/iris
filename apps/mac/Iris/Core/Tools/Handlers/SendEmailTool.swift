@@ -16,6 +16,10 @@ struct SendEmailTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let to = args["to"] as? String, !to.isEmpty else { throw ToolError.invalidArguments }
         let subject = (args["subject"] as? String) ?? ""
@@ -30,9 +34,15 @@ struct SendEmailTool: Tool {
         if !items.isEmpty   { comps.queryItems = items }
 
         guard let url = comps.url else { throw ToolError.invalidArguments }
-        return await MainActor.run {
+        await MainActor.run {
             NSWorkspace.shared.open(url)
-            return "Opened a draft to \(to)."
         }
+        let summary = "Opened a draft to \(to)."
+        let card = EmailSentCardData(
+            recipient: to,
+            subject: subject.isEmpty ? "(no subject)" : subject,
+            preview: body.isEmpty ? nil : body
+        )
+        return .rich(text: summary, ui: ToolUIResult(kind: .emailSent(card)))
     }
 }

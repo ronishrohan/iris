@@ -14,6 +14,10 @@ struct LookupContactTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let name = args["name"] as? String, !name.isEmpty else { throw ToolError.invalidArguments }
 
@@ -28,7 +32,7 @@ struct LookupContactTool: Tool {
             CNContactOrganizationNameKey
         ].map { $0 as CNKeyDescriptor }
         let matches = try store.unifiedContacts(matching: predicate, keysToFetch: keys)
-        if matches.isEmpty { return "No contacts found for \"\(name)\"." }
+        if matches.isEmpty { return .text("No contacts found for \"\(name)\".") }
 
         let lines: [String] = matches.prefix(5).map { c in
             var s = "**\(c.givenName) \(c.familyName)**"
@@ -41,6 +45,25 @@ struct LookupContactTool: Tool {
             }
             return s
         }
-        return lines.joined(separator: "\n\n")
+        let summary = lines.joined(separator: "\n\n")
+
+        // Card shows the top match.
+        let top = matches[0]
+        let fullName = [top.givenName, top.familyName]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let initials: String = {
+            let first = top.givenName.first.map(String.init) ?? ""
+            let last  = top.familyName.first.map(String.init) ?? ""
+            let combined = (first + last).uppercased()
+            return combined.isEmpty ? "?" : combined
+        }()
+        let card = ContactCardData(
+            name: fullName.isEmpty ? top.organizationName : fullName,
+            primaryPhone: top.phoneNumbers.first?.value.stringValue,
+            primaryEmail: top.emailAddresses.first.map { $0.value as String },
+            initials: initials
+        )
+        return .rich(text: summary, ui: ToolUIResult(kind: .contact(card)))
     }
 }

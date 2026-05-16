@@ -18,6 +18,10 @@ struct CreateCalendarEventTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let title = args["title"] as? String,
               let startStr = args["start_iso8601"] as? String,
@@ -46,7 +50,17 @@ struct CreateCalendarEventTool: Tool {
 
         let f = DateFormatter()
         f.dateStyle = .medium; f.timeStyle = .short
-        return "Event created: \(title) — \(f.string(from: start))."
+        let summary = "Event created: \(title) — \(f.string(from: start))."
+        let card = CalendarEventCardData(
+            title: title,
+            start: start,
+            end: end,
+            location: args["location"] as? String,
+            calendarName: ev.calendar?.title,
+            calendarColorHex: CreateReminderTool.hex(from: ev.calendar?.cgColor),
+            eventIdentifier: ev.eventIdentifier
+        )
+        return .rich(text: summary, ui: ToolUIResult(kind: .calendarEvent(card)))
     }
 }
 
@@ -63,6 +77,10 @@ struct ListCalendarEventsTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         let days = Int((args["days_ahead"] as? Double) ?? 2)
 
@@ -75,13 +93,28 @@ struct ListCalendarEventsTool: Tool {
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         let events = store.events(matching: predicate)
 
-        if events.isEmpty { return "No events in the next \(days) day(s)." }
+        if events.isEmpty {
+            return .text("No events in the next \(days) day(s).")
+        }
         let f = DateFormatter()
         f.dateStyle = .medium; f.timeStyle = .short
-        let lines = events.prefix(20).map { ev -> String in
-            "• \(ev.title ?? "(untitled)") — \(f.string(from: ev.startDate))" +
-            (ev.location.map { " @ \($0)" } ?? "")
+
+        let cards = events.prefix(20).map { ev -> CalendarEventCardData in
+            CalendarEventCardData(
+                title: ev.title ?? "(untitled)",
+                start: ev.startDate,
+                end: ev.endDate,
+                location: ev.location,
+                calendarName: ev.calendar?.title,
+                calendarColorHex: CreateReminderTool.hex(from: ev.calendar?.cgColor),
+                eventIdentifier: ev.eventIdentifier
+            )
         }
-        return lines.joined(separator: "\n")
+        let lines = cards.map { ev -> String in
+            "• \(ev.title) — \(f.string(from: ev.start))" +
+            ((ev.location ?? "").isEmpty ? "" : " @ \(ev.location!)")
+        }
+        return .rich(text: lines.joined(separator: "\n"),
+                     ui: ToolUIResult(kind: .calendarEventList(Array(cards))))
     }
 }

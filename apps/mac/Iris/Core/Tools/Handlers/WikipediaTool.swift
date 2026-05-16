@@ -13,6 +13,10 @@ struct WikipediaTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let query = args["query"] as? String, !query.isEmpty else { throw ToolError.invalidArguments }
 
@@ -36,7 +40,7 @@ struct WikipediaTool: Tool {
             throw ToolError.notFound("No HTTP response from Wikipedia.")
         }
         guard http.statusCode != 404 else {
-            return "No Wikipedia article found for \"\(query)\"."
+            return .text("No Wikipedia article found for \"\(query)\".")
         }
         guard (200..<300).contains(http.statusCode) else {
             throw ToolError.notFound("Wikipedia HTTP \(http.statusCode).")
@@ -50,10 +54,11 @@ struct WikipediaTool: Tool {
         let pageURL = ((json["content_urls"] as? [String: Any])?["desktop"] as? [String: Any])?["page"] as? String
 
         if extract.isEmpty {
-            return "Found \"\(title2)\" on Wikipedia, but no summary available."
+            return .text("Found \"\(title2)\" on Wikipedia, but no summary available.")
         }
         var out = "**\(title2)**\n\n\(extract)"
         if let pageURL { out += "\n\nSource: \(pageURL)" }
-        return out
+        let card = WikipediaCardData(title: title2, summary: extract, url: pageURL)
+        return .rich(text: out, ui: ToolUIResult(kind: .wikipedia(card)))
     }
 }

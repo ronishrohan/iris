@@ -22,15 +22,40 @@ struct MusicControlTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let action = args["action"] as? String else { throw ToolError.invalidArguments }
 
+        func wrap(_ text: String, actionLabel: String) -> ToolRunResult {
+            // Try to pull "Title — Artist" from the script output. Falls
+            // back to nothing.
+            var title: String? = nil
+            var artist: String? = nil
+            if text.contains(" — ") {
+                let pieces = text.split(separator: "—", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+                if pieces.count == 2 {
+                    title = pieces[0]
+                    artist = pieces[1]
+                }
+            }
+            let card = MusicCardData(title: title, artist: artist, action: actionLabel)
+            return .rich(text: text, ui: ToolUIResult(kind: .music(card)))
+        }
+
         switch action {
-        case "play":         return try runScript("tell application \"Music\" to play", success: "Playing.")
-        case "pause":        return try runScript("tell application \"Music\" to pause", success: "Paused.")
-        case "play_pause":   return try runScript("tell application \"Music\" to playpause", success: "Toggled play.")
-        case "next":         return try runScript("tell application \"Music\" to next track", success: "Next track.")
-        case "previous":     return try runScript("tell application \"Music\" to previous track", success: "Previous track.")
+        case "play":
+            return wrap(try runScript("tell application \"Music\" to play", success: "Playing."), actionLabel: "Playing")
+        case "pause":
+            return wrap(try runScript("tell application \"Music\" to pause", success: "Paused."), actionLabel: "Paused")
+        case "play_pause":
+            return wrap(try runScript("tell application \"Music\" to playpause", success: "Toggled play."), actionLabel: "Toggled")
+        case "next":
+            return wrap(try runScript("tell application \"Music\" to next track", success: "Next track."), actionLabel: "Next")
+        case "previous":
+            return wrap(try runScript("tell application \"Music\" to previous track", success: "Previous track."), actionLabel: "Previous")
         case "now_playing":
             let src = """
             if application "Music" is running then
@@ -42,7 +67,8 @@ struct MusicControlTool: Tool {
             end if
             return "Nothing playing."
             """
-            return try runAndReturn(src)
+            let out = try runAndReturn(src)
+            return wrap(out, actionLabel: "Now playing")
         case "play_track":
             guard let q = args["query"] as? String, !q.isEmpty else { throw ToolError.invalidArguments }
             let escaped = q.replacingOccurrences(of: "\"", with: "\\\"")
@@ -58,7 +84,8 @@ struct MusicControlTool: Tool {
                 end if
             end tell
             """
-            return try runAndReturn(src)
+            let out = try runAndReturn(src)
+            return wrap(out, actionLabel: "Playing")
         default:
             throw ToolError.invalidArguments
         }

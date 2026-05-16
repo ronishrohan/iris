@@ -15,6 +15,10 @@ struct TakeNoteTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         let title = (args["title"] as? String) ?? "Iris note"
         let body  = (args["body"]  as? String) ?? ""
@@ -32,6 +36,10 @@ struct TakeNoteTool: Tool {
         var error: NSDictionary?
         _ = NSAppleScript(source: src)?.executeAndReturnError(&error)
         if let error { throw ToolError.denied("Notes: \(error["NSAppleScriptErrorMessage"] ?? "unknown")") }
-        return "Saved note: \(title)."
+
+        let preview = title.isEmpty ? body : "\(title)\n\(body)"
+        let card = NoteCardData(preview: preview, folder: nil)
+        return .rich(text: "Saved note: \(title).",
+                     ui: ToolUIResult(kind: .note(card)))
     }
 }

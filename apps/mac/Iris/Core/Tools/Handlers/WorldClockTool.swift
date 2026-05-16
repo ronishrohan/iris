@@ -13,15 +13,42 @@ struct WorldClockTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let loc = args["location"] as? String, !loc.isEmpty else { throw ToolError.invalidArguments }
 
         let tz = resolveTimeZone(loc) ?? TimeZone.current
-        let f = DateFormatter()
-        f.timeZone = tz
-        f.dateStyle = .medium
-        f.timeStyle = .short
-        return "\(loc): \(f.string(from: Date())) (\(tz.identifier))"
+        let now = Date()
+        let timeFmt = DateFormatter()
+        timeFmt.timeZone = tz
+        timeFmt.dateStyle = .none
+        timeFmt.timeStyle = .short
+
+        let dateFmt = DateFormatter()
+        dateFmt.timeZone = tz
+        dateFmt.dateFormat = "EEE d MMM"
+
+        let fullFmt = DateFormatter()
+        fullFmt.timeZone = tz
+        fullFmt.dateStyle = .medium
+        fullFmt.timeStyle = .short
+
+        var cal = Calendar.current
+        cal.timeZone = tz
+        let hour = cal.component(.hour, from: now)
+        let isDaytime = hour >= 6 && hour < 19
+
+        let summary = "\(loc): \(fullFmt.string(from: now)) (\(tz.identifier))"
+        let card = WorldClockCardData(
+            city: loc,
+            timeText: timeFmt.string(from: now),
+            dateText: dateFmt.string(from: now),
+            isDaytime: isDaytime
+        )
+        return .rich(text: summary, ui: ToolUIResult(kind: .worldClock(card)))
     }
 
     private func resolveTimeZone(_ name: String) -> TimeZone? {

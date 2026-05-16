@@ -13,6 +13,10 @@ struct CalculateTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let raw = args["expression"] as? String, !raw.isEmpty else { throw ToolError.invalidArguments }
 
@@ -34,6 +38,9 @@ struct CalculateTool: Tool {
         guard let result = nsExpr.expressionValue(with: nil, context: nil) else {
             throw ToolError.invalidArguments
         }
-        return "\(raw) = \(result)"
+        let resultStr = "\(result)"
+        let summary = "\(raw) = \(resultStr)"
+        let card = CalculationCardData(expression: raw, result: resultStr)
+        return .rich(text: summary, ui: ToolUIResult(kind: .calculation(card)))
     }
 }

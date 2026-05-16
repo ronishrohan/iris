@@ -70,6 +70,14 @@ final class ConversationOrchestrator {
         or control the system. Don't ask permission first; just call the tool. \
         After a tool runs, confirm the result in one short sentence and stop.
 
+        Some tools (reminder, calendar event, timer, weather, calculator, \
+        contact lookup, message sent, etc.) render a native-style card \
+        above your reply showing the result. When that happens, do NOT \
+        repeat the details in prose — the card already shows them. Just \
+        confirm in a few words: \"Done.\" / \"Saved.\" / \"Set.\" / \
+        \"Here you go.\" For pure-info tools (web search, Wikipedia, world \
+        clock) you can still add a one-line takeaway if helpful.
+
         # Ending the session
         If the user clearly signals they're done — \"thanks\", \"that's it\", \
         \"done\", \"goodbye\", \"never mind\", \"okay cool\", \"that'll be all\", \
@@ -93,6 +101,7 @@ final class ConversationOrchestrator {
 
     func turn(userText: String) async {
         appState.latestResponse = ""
+        appState.latestResponseCard = nil
         appState.phase = .thinking
 
         let apiKey = appState.settings.deepseekApiKey
@@ -187,9 +196,12 @@ final class ConversationOrchestrator {
             for call in toolCalls {
                 appState.phase = .toolCalling(name: call.function.name)
                 var result: String
+                var richUI: ToolUIResult? = nil
                 do {
                     if let tool = registry.find(call.function.name) {
-                        result = try await tool.run(argumentsJSON: call.function.arguments)
+                        let outcome = try await tool.runRich(argumentsJSON: call.function.arguments)
+                        result = outcome.modelText
+                        richUI = outcome.ui
                         ranAnyToolSuccessfully = true
                     } else {
                         result = "Unknown tool: \(call.function.name)"
@@ -207,6 +219,14 @@ final class ConversationOrchestrator {
                     let action = String(result.dropFirst(EndSessionTool.sentinelPrefix.count))
                     handleEndSession(action: action)
                     result = "Session ended."
+                    richUI = nil
+                }
+                // Surface the rich UI payload to the panel so the
+                // response view can render a native-style card. Later
+                // tool calls in the same turn overwrite earlier ones —
+                // the model only needs to surface one primary card.
+                if let richUI {
+                    appState.latestResponseCard = richUI
                 }
                 messages.append(ChatMessage(role: .tool,
                                             content: result,

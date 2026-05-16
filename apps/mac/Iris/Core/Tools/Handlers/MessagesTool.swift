@@ -15,6 +15,10 @@ struct SendIMessageTool: Tool {
     ]
 
     func run(argumentsJSON: String) async throws -> String {
+        try await runRich(argumentsJSON: argumentsJSON).modelText
+    }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
         let args = try parseArguments(argumentsJSON)
         guard let recipient = args["recipient"] as? String, !recipient.isEmpty,
               let body = args["message"] as? String, !body.isEmpty else {
@@ -34,6 +38,8 @@ struct SendIMessageTool: Tool {
         if let error {
             throw ToolError.denied("Messages: \(error["NSAppleScriptErrorMessage"] ?? "unknown")")
         }
-        return "Sent to \(recipient)."
+        let card = MessageSentCardData(recipient: recipient, preview: body)
+        return .rich(text: "Sent to \(recipient).",
+                     ui: ToolUIResult(kind: .messageSent(card)))
     }
 }

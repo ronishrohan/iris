@@ -17,6 +17,11 @@ final class AppState {
     var inputText: String = ""
     var latestResponse: String = ""
 
+    /// Structured per-task payload for the most-recent tool call, if it
+    /// emitted one. Drives the rich response cards (reminders, timer,
+    /// calendar, weather, etc.). Cleared at the start of every turn.
+    var latestResponseCard: ToolUIResult? = nil
+
     /// Previously completed responses for this session. The visible card
     /// stack shows the newest response on top with older ones peeking out
     /// behind it with a small offset.
@@ -115,6 +120,7 @@ final class AppState {
         phase = .idle
         inputText = ""
         latestResponse = ""
+        latestResponseCard = nil
         voiceMode = true
         wakeWord.pause()
         orbController.show(appState: self)
@@ -186,6 +192,7 @@ final class AppState {
             phase = .idle
             inputText = ""
             latestResponse = ""
+            latestResponseCard = nil
             // The wake-word audio engine running in the background can
             // interfere with the panel's keyboard routing on macOS 26.
             // Pause it while the panel is open; resume on close. The
@@ -221,6 +228,7 @@ final class AppState {
         }
         inputText = ""
         latestResponse = ""
+        latestResponseCard = nil
         submitPulseCounter += 1
         // Capture voice intent now; the orchestrator may flip it off
         // mid-turn if the LLM calls end_session.
@@ -275,6 +283,7 @@ final class AppState {
         phase = .idle
         inputText = ""
         latestResponse = ""
+        latestResponseCard = nil
         pastResponses.removeAll()
         if isListening { dictation.cancel() }
         isListening = false

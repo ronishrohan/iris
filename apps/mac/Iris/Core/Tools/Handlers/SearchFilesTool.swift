@@ -80,6 +80,25 @@ struct SearchFilesTool: Tool {
         if paths.isEmpty { return "No files matched \"\(q)\"." }
         return paths.map { "• \($0)" }.joined(separator: "\n")
     }
+
+    func runRich(argumentsJSON: String) async throws -> ToolRunResult {
+        let text = try await run(argumentsJSON: argumentsJSON)
+        // No-match path returns just the "No files…" string.
+        if text.hasPrefix("No files matched") {
+            return .text(text)
+        }
+        let lines = text.split(separator: "\n").map(String.init)
+        let cards = lines.compactMap { line -> FileCardData? in
+            var s = line
+            if s.hasPrefix("• ") { s.removeFirst(2) }
+            let trimmed = s.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            let url = URL(fileURLWithPath: trimmed)
+            let ext = url.pathExtension.lowercased()
+            return FileCardData(name: url.lastPathComponent, path: trimmed, kindHint: ext)
+        }
+        return .rich(text: text, ui: ToolUIResult(kind: .fileList(cards)))
+    }
 }
 
 private final class QueryBox: @unchecked Sendable {

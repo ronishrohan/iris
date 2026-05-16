@@ -26,6 +26,8 @@ struct IrisPanelView: View {
                 .animation(.spring(response: 0.34, dampingFraction: 0.82),
                            value: appState.latestResponse.isEmpty)
                 .animation(.spring(response: 0.34, dampingFraction: 0.82),
+                           value: appState.latestResponseCard == nil)
+                .animation(.spring(response: 0.34, dampingFraction: 0.82),
                            value: isWorking)
                 .animation(.spring(response: 0.34, dampingFraction: 0.82),
                            value: isErrored)
@@ -121,7 +123,10 @@ struct IrisPanelView: View {
     }
 
     private var hasFrontCard: Bool {
-        !appState.latestResponse.isEmpty || isWorking || isErrored
+        !appState.latestResponse.isEmpty
+            || appState.latestResponseCard != nil
+            || isWorking
+            || isErrored
     }
 
     @ViewBuilder
@@ -307,7 +312,7 @@ struct IrisPanelView: View {
 
     @ViewBuilder
     private var responseView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             if let err = errorMessage {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -318,33 +323,48 @@ struct IrisPanelView: View {
                         .foregroundStyle(.primary)
                         .textSelection(.enabled)
                 }
-            } else if !appState.latestResponse.isEmpty {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        MarkdownText(appState.latestResponse)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .id("iris.response.body")
-                            .background(
-                                // Sentinel pinned to the very bottom that
-                                // we scroll to whenever the stream grows.
-                                GeometryReader { _ in Color.clear }
+            } else {
+                if let card = appState.latestResponseCard {
+                    ResponseCardHost(ui: card)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .move(edge: .top))
+                                    .combined(with: .scale(scale: 0.96, anchor: .top)),
+                                removal: .opacity
                             )
-                        Color.clear
-                            .frame(height: 1)
-                            .id("iris.response.bottom")
-                    }
-                    .frame(maxHeight: 240)
-                    .onChange(of: appState.latestResponse) { _, _ in
-                        // Keep the newest streamed text in view. Use
-                        // `.bottom` so we follow the tail of the stream
-                        // rather than yanking back to the top.
-                        withAnimation(.linear(duration: 0.12)) {
-                            proxy.scrollTo("iris.response.bottom", anchor: .bottom)
+                        )
+                }
+                if !appState.latestResponse.isEmpty {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            MarkdownText(appState.latestResponse)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                                .id("iris.response.body")
+                                .background(
+                                    // Sentinel pinned to the very bottom that
+                                    // we scroll to whenever the stream grows.
+                                    GeometryReader { _ in Color.clear }
+                                )
+                            Color.clear
+                                .frame(height: 1)
+                                .id("iris.response.bottom")
+                        }
+                        .frame(maxHeight: 240)
+                        .onChange(of: appState.latestResponse) { _, _ in
+                            // Keep the newest streamed text in view. Use
+                            // `.bottom` so we follow the tail of the stream
+                            // rather than yanking back to the top.
+                            withAnimation(.linear(duration: 0.12)) {
+                                proxy.scrollTo("iris.response.bottom", anchor: .bottom)
+                            }
                         }
                     }
                 }
-            } else if isWorking {
+            }
+            if isWorking && errorMessage == nil &&
+               appState.latestResponse.isEmpty && appState.latestResponseCard == nil {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text(workingLabel)
