@@ -138,10 +138,19 @@ final class ConversationOrchestrator {
                               model: model,
                               ranAnyToolSuccessfully: &ranAnyToolSuccessfully,
                               anyToolFailed: &anyToolFailed)
+        } catch is CancellationError {
+            // User hit Esc. AppState.interrupt() already cleared the
+            // visible response and set phase to .done.
+            return
         } catch {
+            if Task.isCancelled { return }
             appState.phase = .error(error.localizedDescription)
             return
         }
+
+        // If the user cancelled while the loop was wrapping up, bail
+        // out without persisting the partial assistant message.
+        if Task.isCancelled { return }
 
         // Persist the user turn and the assistant's final reply.
         sessionMessages.append(ChatMessage(role: .user, content: userText))
@@ -169,6 +178,7 @@ final class ConversationOrchestrator {
         var pendingToolCalls: [Int: PendingToolCall] = [:]
 
         for try await event in client.stream(messages: messages, tools: tools, model: model) {
+            try Task.checkCancellation()
             switch event {
             case .contentDelta(let s):
                 assistantText += s
@@ -185,6 +195,8 @@ final class ConversationOrchestrator {
                 break
             }
         }
+
+        try Task.checkCancellation()
 
         if !pendingToolCalls.isEmpty {
             let toolCalls = pendingToolCalls
@@ -203,6 +215,7 @@ final class ConversationOrchestrator {
             ))
 
             for call in toolCalls {
+                try Task.checkCancellation()
                 appState.phase = .toolCalling(name: call.function.name)
                 var result: String
                 var richUI: ToolUIResult? = nil

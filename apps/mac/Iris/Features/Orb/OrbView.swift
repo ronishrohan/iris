@@ -81,7 +81,15 @@ struct IrisPanelView: View {
                 hasStartedTint = false
             }
         }
-        .onExitCommand { appState.dismiss() }
+        .onExitCommand {
+            // Esc cancels a turn that's still working; otherwise it
+            // dismisses the panel as before.
+            if isWorking {
+                appState.interrupt()
+            } else {
+                appState.dismiss()
+            }
+        }
         .animation(.spring(response: 0.32, dampingFraction: 0.78),
                    value: appState.latestResponse.isEmpty)
         .animation(.spring(response: 0.32, dampingFraction: 0.78),

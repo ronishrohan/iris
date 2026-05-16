@@ -54,6 +54,9 @@ final class AppState {
     let wakeWord = WakeWordEngine()
     let dictation = LiveDictation()
     private var orchestrator: ConversationOrchestrator?
+    /// Handle to the currently-running turn so the user can cancel it
+    /// with Esc. Cleared on completion / cancellation.
+    private var currentTurnTask: Task<Void, Never>?
 
     init() {
         self.orbController = OrbWindowController()
@@ -233,23 +236,43 @@ final class AppState {
         // Capture voice intent now; the orchestrator may flip it off
         // mid-turn if the LLM calls end_session.
         let submittedFromVoice = voiceMode
-        Task { [weak self] in
+        currentTurnTask = Task { [weak self] in
             guard let self else { return }
             await self.ensureOrchestrator().turn(userText: trimmed)
+            // The orchestrator checks Task.isCancelled at each loop
+            // step, so a cancelled turn returns here normally with the
+            // phase already set to .done by interrupt().
+            self.currentTurnTask = nil
+
             // Re-arm voice ONLY if we started in voice mode AND the LLM
-            // didn't end the session AND the panel is still open.
-            guard submittedFromVoice,
+            // didn't end the session AND the panel is still open AND
+            // the turn wasn't cancelled.
+            guard !Task.isCancelled,
+                  submittedFromVoice,
                   self.voiceMode,
                   self.orbController.isShown,
                   !self.orbController.isClosing else { return }
             try? await Task.sleep(nanoseconds: 400_000_000)
-            // Re-check after the sleep — could have closed or stopped
-            // voice in the meantime (e.g. user clicked the mic button).
-            guard self.voiceMode,
+            guard !Task.isCancelled,
+                  self.voiceMode,
                   self.orbController.isShown,
                   !self.orbController.isClosing else { return }
             self.startDictation()
         }
+    }
+
+    /// User pressed Esc while a turn was in flight. Cancel the
+    /// orchestrator task, stop showing the working state, and keep the
+    /// panel open so they can ask something else.
+    func interrupt() {
+        guard isGenerating else { return }
+        currentTurnTask?.cancel()
+        currentTurnTask = nil
+        // Empty out anything the cancelled turn may have started
+        // streaming so the user isn't left with a half-baked reply.
+        latestResponse = ""
+        latestResponseCard = nil
+        phase = .done
     }
 
     /// Called when a turn fully completes, so we can later move it onto
