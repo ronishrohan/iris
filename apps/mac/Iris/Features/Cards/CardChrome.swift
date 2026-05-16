@@ -2,45 +2,66 @@ import SwiftUI
 import AppKit
 
 /// Common rounded-glass surface shared by every tool result card.
-/// Provides padding, a soft border, a content-shape so the whole card
-/// is tappable, and an optional `onOpen` hook that lets the card act
-/// like a Siri snippet — tap anywhere to jump into the relevant
-/// system app.
+/// Renders the card body and, when an `onOpen` hook is provided, a
+/// dedicated "Open" button along the bottom edge — no hover scale,
+/// no corner chevron, just an obvious button.
 struct CardChrome<Content: View>: View {
     let onOpen: (() -> Void)?
+    let openLabel: String
     @ViewBuilder var content: () -> Content
 
-    @State private var hovering = false
-
     init(onOpen: (() -> Void)? = nil,
+         openLabel: String = "Open",
          @ViewBuilder content: @escaping () -> Content) {
         self.onOpen = onOpen
+        self.openLabel = openLabel
         self.content = content
     }
 
     var body: some View {
-        content()
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .onHover { hovering = $0 }
-            .scaleEffect(hovering && onOpen != nil ? 1.005 : 1.0)
-            .animation(.easeOut(duration: 0.15), value: hovering)
-            .onTapGesture {
-                onOpen?()
+        VStack(alignment: .leading, spacing: onOpen == nil ? 0 : 10) {
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let onOpen {
+                HStack {
+                    Spacer()
+                    CardOpenButton(label: openLabel, action: onOpen)
+                }
             }
-            .help(onOpen != nil ? "Open in app" : "")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }
 
-/// A small "open in app" chevron used in the trailing edge of cards so
-/// the user notices the card is tappable.
-struct CardOpenChevron: View {
+/// Simple pill button used by every card that deep-links into a
+/// system app. Looks like a small native control, no glass / no scale
+/// trickery.
+struct CardOpenButton: View {
+    let label: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
     var body: some View {
-        Image(systemName: "arrow.up.forward.app.fill")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary.opacity(0.6))
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(.thickMaterial)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(hovering ? 0.18 : 0.08),
+                                      lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 

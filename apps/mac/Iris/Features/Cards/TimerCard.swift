@@ -23,7 +23,6 @@ struct TimerCard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
             }
         }
     }

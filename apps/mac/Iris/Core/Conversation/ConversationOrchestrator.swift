@@ -8,6 +8,14 @@ final class ConversationOrchestrator {
     /// Persistent message history for the current open-session. Reset
     /// whenever the panel closes (see AppState.finishClose).
     private var sessionMessages: [ChatMessage] = []
+
+    /// Card emitted by the most recent tool call in the current turn.
+    /// We hold onto it instead of pushing it to AppState immediately so
+    /// intermediate "scratch" tool calls (e.g. world_clock or weather
+    /// the model uses to figure out timing before creating a reminder)
+    /// don't briefly flash a stale-looking card to the user. The final
+    /// card is committed to AppState when the assistant's reply lands.
+    private var pendingTurnCard: ToolUIResult? = nil
     private let systemPrompt = ChatMessage(
         role: .system,
         content: """
@@ -102,6 +110,7 @@ final class ConversationOrchestrator {
     func turn(userText: String) async {
         appState.latestResponse = ""
         appState.latestResponseCard = nil
+        pendingTurnCard = nil
         appState.phase = .thinking
 
         let apiKey = appState.settings.deepseekApiKey
@@ -221,12 +230,14 @@ final class ConversationOrchestrator {
                     result = "Session ended."
                     richUI = nil
                 }
-                // Surface the rich UI payload to the panel so the
-                // response view can render a native-style card. Later
-                // tool calls in the same turn overwrite earlier ones —
-                // the model only needs to surface one primary card.
+                // Hold onto the rich UI payload for *later* — we only
+                // commit it to AppState once the assistant produces
+                // its final reply, so intermediate scratch tool calls
+                // (weather/world_clock that the model uses for
+                // reasoning) don't flash an unrelated card. Later tool
+                // calls in the same turn overwrite earlier ones.
                 if let richUI {
-                    appState.latestResponseCard = richUI
+                    pendingTurnCard = richUI
                 }
                 messages.append(ChatMessage(role: .tool,
                                             content: result,
@@ -244,6 +255,14 @@ final class ConversationOrchestrator {
             return
         }
 
+        // The assistant has produced its final reply — commit the most
+        // recent tool's card (if any) so the user sees a single
+        // result-of-the-turn card, not whatever the model used for
+        // intermediate lookups.
+        if let card = pendingTurnCard {
+            appState.latestResponseCard = card
+            pendingTurnCard = nil
+        }
         appState.phase = .done
     }
 

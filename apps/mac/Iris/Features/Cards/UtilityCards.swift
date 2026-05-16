@@ -49,7 +49,6 @@ struct WorldClockCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
             }
         }
     }
@@ -86,7 +85,6 @@ struct NoteCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
             }
         }
     }
@@ -130,7 +128,6 @@ struct FileListCard: View {
                                     .truncationMode(.middle)
                             }
                             Spacer(minLength: 0)
-                            CardOpenChevron()
                         }
                         .padding(.vertical, 3)
                         .contentShape(Rectangle())
@@ -218,7 +215,10 @@ struct WikipediaCard: View {
     let data: WikipediaCardData
 
     var body: some View {
-        CardChrome(onOpen: data.url.map { url in { CardDeepLink.open(url) } }) {
+        CardChrome(
+            onOpen: data.url.map { url in { CardDeepLink.open(url) } },
+            openLabel: "Read on Wikipedia"
+        ) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Image(systemName: "book.closed.fill")
@@ -228,7 +228,6 @@ struct WikipediaCard: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if data.url != nil { CardOpenChevron() }
                 }
                 Text(data.title)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))

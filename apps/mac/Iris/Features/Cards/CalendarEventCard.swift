@@ -33,7 +33,6 @@ struct CalendarEventCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
             }
         }
     }
@@ -98,7 +97,6 @@ struct CalendarEventListCard: View {
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    CardOpenChevron()
                 }
                 ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { _, ev in
                     HStack(alignment: .top, spacing: 10) {

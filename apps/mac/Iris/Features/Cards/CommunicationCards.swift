@@ -37,7 +37,7 @@ struct MusicCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
+
             }
         }
     }
@@ -90,7 +90,7 @@ struct ContactCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
+
             }
         }
     }
@@ -129,7 +129,7 @@ struct MessageSentCard: View {
                         .lineLimit(3)
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
+
             }
         }
     }
@@ -173,7 +173,7 @@ struct EmailSentCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
+
             }
         }
     }

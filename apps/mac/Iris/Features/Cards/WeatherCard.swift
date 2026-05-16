@@ -26,13 +26,10 @@ struct WeatherCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 6) {
-                    if let hl = data.highLowText {
-                        Text(hl)
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
-                    CardOpenChevron()
+                if let hl = data.highLowText {
+                    Text(hl)
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(.secondary)
                 }
             }
         }

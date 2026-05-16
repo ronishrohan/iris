@@ -22,7 +22,6 @@ struct ReminderCard: View {
                     }
                 }
                 Spacer(minLength: 8)
-                CardOpenChevron()
             }
         }
     }
@@ -80,7 +79,6 @@ struct ReminderListCard: View {
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    CardOpenChevron()
                 }
                 ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { _, r in
                     HStack(alignment: .center, spacing: 10) {

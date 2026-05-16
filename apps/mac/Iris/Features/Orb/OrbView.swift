@@ -310,6 +310,16 @@ struct IrisPanelView: View {
         .help(appState.isListening ? "Stop listening" : "Start voice input")
     }
 
+    /// True when the only thing inside the response view is a rich
+    /// card (no prose, no error, no spinner). We collapse the outer
+    /// padding in that case so the card's own padding is what we see.
+    private var responseShowsOnlyCard: Bool {
+        appState.latestResponseCard != nil
+            && appState.latestResponse.isEmpty
+            && errorMessage == nil
+            && !isWorking
+    }
+
     @ViewBuilder
     private var responseView: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -373,8 +383,8 @@ struct IrisPanelView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, responseShowsOnlyCard ? 4 : 16)
+        .padding(.vertical, responseShowsOnlyCard ? 4 : 12)
     }
 
     private var workingLabel: String {
