@@ -138,10 +138,12 @@ final class LiveDictation: NSObject {
 
     private func publishLevel(_ raw: Float) {
         guard isRunning else { return }
-        // Exponential smoothing so the visualization eases rather than
-        // jitters with every buffer.
-        let attack: Float = 0.45   // rises quickly when the user speaks
-        let release: Float = 0.15  // falls more gently
+        // Heavier exponential smoothing so the visualization glides
+        // between values rather than tracking every audio frame. Attack
+        // is still faster than release so a sudden onset is felt, just
+        // not as a step change.
+        let attack: Float = 0.18
+        let release: Float = 0.06
         let coeff = raw > smoothedLevel ? attack : release
         smoothedLevel += (raw - smoothedLevel) * coeff
         onLevel?(max(0, min(1, smoothedLevel)))
@@ -161,8 +163,11 @@ final class LiveDictation: NSObject {
             sum += s * s
         }
         let rms = sqrtf(sum / Float(frameLength))
-        // Scale: ~0.25 raw RMS → ~1.0 visualized.
-        return min(1.0, rms * 4.0)
+        // Subtract a noise floor so ambient room hiss stays at zero.
+        // Then map: ~0.25 raw RMS → ~1.0 visualized.
+        let noiseFloor: Float = 0.015
+        let cleaned = max(0, rms - noiseFloor)
+        return min(1.0, cleaned * 4.5)
     }
 
     /// Stop without firing `onComplete`. Used when the user cancels.

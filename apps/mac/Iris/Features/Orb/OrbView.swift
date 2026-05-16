@@ -732,6 +732,11 @@ struct MicListeningTint: View {
     @State private var enterProgress: CGFloat = 0
     @State private var exitProgress: CGFloat = 0
     @State private var shouldRender: Bool = false
+    /// Heavily-damped amplitude used to drive the shader. Updated on
+    /// every external `amplitude` change with a soft animation so the
+    /// shader gets a continuous, gliding signal rather than the raw
+    /// frame-by-frame ticks coming off the mic.
+    @State private var dampedAmp: Float = 0
 
     var body: some View {
         Group {
@@ -763,16 +768,38 @@ struct MicListeningTint: View {
                     try? await Task.sleep(nanoseconds: 280_000_000)
                     if !active { shouldRender = false }
                 }
+                // Glide back to silence so the shader doesn't snap.
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    dampedAmp = 0
+                }
+            }
+        }
+        .onChange(of: amplitude) { _, new in
+            // Soft threshold: anything below `gate` reads as silence;
+            // values above are remapped to 0…1 with a gentle curve so
+            // small voice swells move the shader subtly rather than
+            // making it jump.
+            let gate: Float = 0.12
+            let raw = max(0, min(1, new))
+            let shaped: Float
+            if raw <= gate {
+                shaped = 0
+            } else {
+                let t = (raw - gate) / (1 - gate)
+                shaped = t * t * (3 - 2 * t)  // smoothstep
+            }
+            withAnimation(.easeOut(duration: 0.45)) {
+                dampedAmp = shaped
             }
         }
     }
 
     @ViewBuilder
     private var tintBody: some View {
-        // Idle mic still has a clearly visible baseline; voice
-        // amplitude pushes intensity toward full AND drives the
-        // shader-side drift speed + brightness.
-        let amp = max(0, min(1, Double(amplitude)))
+        // `dampedAmp` is the smoothed, gated signal we hand to the
+        // shader. The raw `amplitude` jitters too much frame to frame
+        // to drive a shader directly.
+        let amp = Double(dampedAmp)
         let intensity = Float(0.80 + amp * 0.20)
         NebulaView(intensity: intensity, amp: Float(amp))
             .mask(

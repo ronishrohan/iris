@@ -49,8 +49,11 @@ static float n_fbm(float2 p) {
     float2 p = float2(uv.x * aspect, uv.y);
 
     // Voice drives time-drift. Idle has a slow base drift; speech
-    // multiplies it so the smoke visibly surges with loudness.
-    float driftSpeed = 1.0 + amp * 6.0;
+    // accelerates it. Kept gentle so the animation eases rather than
+    // surges — the Swift side already gates / damps the amplitude
+    // signal, but a softer max multiplier here makes the whole thing
+    // feel less twitchy.
+    float driftSpeed = 1.0 + amp * 2.5;
     float t = time * driftSpeed;
 
     // Lower spatial frequencies = bigger, blobbier bumps. Three drift
@@ -61,10 +64,11 @@ static float n_fbm(float2 p) {
     float n3 = n_fbm(p * 2.40 + float2( t * 0.050, -t * 0.030));
     float density = saturate(n1 * 0.75 + n2 * 0.30 + n3 * 0.12);
 
-    // Smoke base: very faint cool-white haze that gets brighter with
-    // voice. Curve density so the tails taper into clear glass rather
-    // than uniform grey.
-    float baseBright = 0.30 + amp * 0.55;
+    // Smoke base: very faint cool-white haze that gets slightly
+    // brighter with voice (kept subtle so the pill doesn't pulse).
+    // Curve density so the tails taper into clear glass rather than
+    // uniform grey.
+    float baseBright = 0.45 + amp * 0.25;
     float smokeAlpha = pow(density, 1.3) * baseBright * intensity;
     half3  rgb       = half3(0.85h, 0.87h, 0.93h);
     half   alpha     = half(smokeAlpha);
