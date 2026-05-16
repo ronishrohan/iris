@@ -32,6 +32,9 @@ final class OrbWindowController {
     var isVisible: Bool { panel?.isVisible ?? false }
 
     func show(appState: AppState) {
+        // Track previous frontmost app only as a safety net — with the
+        // non-activating panel we shouldn't actually steal focus, but if
+        // for any reason we do, hide() will hand it back.
         let ourBundleID = Bundle.main.bundleIdentifier
         if let front = NSWorkspace.shared.frontmostApplication,
            front.bundleIdentifier != ourBundleID {
@@ -71,8 +74,13 @@ final class OrbWindowController {
         isShown = true
         isClosing = false
 
-        NSApp.activate(ignoringOtherApps: true)
-        p.makeKeyAndOrderFront(nil)
+        // Raycast-style: don't activate our app (would visually defocus the
+        // user's frontmost window). Just put our panel above everything and
+        // make it the key window so keystrokes route to our text field.
+        // The other app's title bar stays "active" because we're a
+        // non-activating utility panel.
+        p.orderFrontRegardless()
+        p.makeKey()
 
         // Outside our window: dismiss but don't consume.
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(
@@ -124,8 +132,14 @@ final class OrbWindowController {
         isShown = false
         isClosing = false
 
-        if restoringFocus, let bid = previousFrontmostBundleID,
+        if restoringFocus,
+           let ourBundleID = Bundle.main.bundleIdentifier,
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier == ourBundleID,
+           let bid = previousFrontmostBundleID,
            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bid).first {
+            // Only re-activate the previous app if we somehow became the
+            // frontmost app ourselves; with a non-activating panel this
+            // shouldn't happen, but it's a cheap safety net.
             app.activate()
         }
         previousFrontmostBundleID = nil

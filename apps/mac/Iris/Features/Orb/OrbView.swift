@@ -8,21 +8,24 @@ struct IrisPanelView: View {
     @State private var observedCloseCounter = 0
 
     var body: some View {
-        GlassEffectContainer(spacing: 14) {
-            VStack(spacing: 12) {
+        VStack(spacing: 12) {
+            GlassEffectContainer(spacing: 14) {
                 inputRow
+            }
 
-                if !appState.latestResponse.isEmpty || isWorking {
+            if !appState.latestResponse.isEmpty || isWorking {
+                GlassEffectContainer(spacing: 14) {
                     responseView
                         .glassEffect(.regular, in: .rect(cornerRadius: 20))
-                        .transition(
-                            .asymmetric(
-                                insertion: .scale(scale: 1.05, anchor: .top)
-                                    .combined(with: .opacity),
-                                removal: .opacity.combined(with: .scale(scale: 0.98))
-                            )
-                        )
                 }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .scale(scale: 0.96, anchor: .top)),
+                        removal: .opacity
+                            .combined(with: .scale(scale: 0.98, anchor: .top))
+                    )
+                )
             }
         }
         .frame(width: 640, alignment: .center)
@@ -76,13 +79,18 @@ struct IrisPanelView: View {
 
     @ViewBuilder
     private var inputRow: some View {
-        HStack(spacing: 10) {
-            TextField("Ask Iris…", text: Binding(
+        HStack(spacing: 12) {
+            Image(systemName: "eye")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            TextField("Ask Iris Something", text: Binding(
                 get: { appState.inputText },
                 set: { appState.inputText = $0 }
             ), axis: .vertical)
             .textFieldStyle(.plain)
-            .font(.system(size: 20, weight: .regular, design: .rounded))
+            .font(.system(size: 22, weight: .regular, design: .rounded))
+            .foregroundStyle(.primary)
             .focused($inputFocused)
             .lineLimit(1...4)
             .onSubmit { appState.submit() }
@@ -93,7 +101,7 @@ struct IrisPanelView: View {
                 .animation(.easeOut(duration: 0.15), value: appState.inputText.isEmpty)
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .glassEffect(.regular.interactive(), in: .capsule)
     }
 
