@@ -31,7 +31,7 @@ struct MenuBarContent: View {
         switch appState.phase {
         case .idle: "Idle"
         case .thinking: "Thinking…"
-        case .toolCalling(let name): "Running tool: \(name)"
+        case .toolCalling(let name): "\(ToolLabel.friendly(name))…"
         case .done: "Done"
         case .error(let msg): "Error: \(msg)"
         }

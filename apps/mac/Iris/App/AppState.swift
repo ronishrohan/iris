@@ -310,3 +310,40 @@ final class AppState {
         }
     }
 }
+
+enum ToolLabel {
+    /// Maps a raw tool function name (the string the model uses) into a
+    /// short, human-readable verb phrase suitable for the status line.
+    /// Anything unknown is title-cased and stripped of underscores so it
+    /// at least doesn't look like an identifier.
+    static func friendly(_ rawName: String) -> String {
+        switch rawName {
+        case "create_reminder":        return "Creating a reminder"
+        case "list_reminders":         return "Looking up reminders"
+        case "create_calendar_event":  return "Adding to your calendar"
+        case "list_calendar_events":   return "Checking your calendar"
+        case "set_timer":              return "Setting a timer"
+        case "weather":                return "Checking the weather"
+        case "calculate":              return "Crunching the numbers"
+        case "world_clock":            return "Checking the time"
+        case "take_note":              return "Saving a note"
+        case "search_files":           return "Searching your files"
+        case "web_search":             return "Searching the web"
+        case "wikipedia":              return "Reading Wikipedia"
+        case "music_control":          return "Controlling music"
+        case "lookup_contact":         return "Finding the contact"
+        case "send_imessage":          return "Sending a message"
+        case "send_email":             return "Drafting your email"
+        case "open_app":               return "Opening the app"
+        case "quit_app":               return "Quitting the app"
+        case "open_url":               return "Opening the link"
+        case "system_control":         return "Adjusting settings"
+        case "end_session":            return "Wrapping up"
+        default:
+            return rawName
+                .split(separator: "_")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                .joined(separator: " ")
+        }
+    }
+}

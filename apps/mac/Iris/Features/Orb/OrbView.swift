@@ -390,7 +390,7 @@ struct IrisPanelView: View {
     private var workingLabel: String {
         switch appState.phase {
         case .thinking: return "Thinking…"
-        case .toolCalling(let n): return "Running \(n)…"
+        case .toolCalling(let n): return "\(ToolLabel.friendly(n))…"
         default: return ""
         }
     }
