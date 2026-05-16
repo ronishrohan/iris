@@ -6,6 +6,11 @@ struct IrisPanelView: View {
     @FocusState private var inputFocused: Bool
     @State private var visible = false
     @State private var observedCloseCounter = 0
+    @State private var tintProgress: CGFloat = 0
+    @State private var hasStartedTint = false
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var pulseBrightness: Double = 0.0
+    @State private var observedPulseCounter = 0
 
     var body: some View {
         VStack(spacing: 12) {
@@ -16,6 +21,9 @@ struct IrisPanelView: View {
             if !appState.latestResponse.isEmpty || isWorking {
                 GlassEffectContainer(spacing: 14) {
                     responseView
+                        .background(
+                            SiriBleedTint(progress: tintProgress, cornerRadius: 20)
+                        )
                         .glassEffect(.regular, in: .rect(cornerRadius: 20))
                 }
                 .transition(
@@ -54,6 +62,29 @@ struct IrisPanelView: View {
             observedCloseCounter = newValue
             playClose()
         }
+        .onChange(of: appState.submitPulseCounter) { _, newValue in
+            guard newValue != observedPulseCounter else { return }
+            observedPulseCounter = newValue
+            playSubmitPulse()
+        }
+        .onChange(of: appState.phase) { _, newPhase in
+            // Play the bleed once the assistant finishes responding,
+            // mirroring how macOS Siri tints its answer bubble after the
+            // response lands.
+            if newPhase == .done && !appState.latestResponse.isEmpty && !hasStartedTint {
+                hasStartedTint = true
+                withAnimation(.spring(response: 1.1, dampingFraction: 0.95)) {
+                    tintProgress = 1
+                }
+            }
+        }
+        .onChange(of: appState.latestResponse.isEmpty) { _, isEmpty in
+            // Reset between turns so the next response replays the bleed.
+            if isEmpty {
+                tintProgress = 0
+                hasStartedTint = false
+            }
+        }
         .onExitCommand { appState.dismiss() }
         .animation(.spring(response: 0.32, dampingFraction: 0.78),
                    value: appState.latestResponse.isEmpty)
@@ -67,6 +98,18 @@ struct IrisPanelView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
             appState.finishClose()
+        }
+    }
+
+    private func playSubmitPulse() {
+        // Tiny equal-sides scale (about 2-3px on a 550pt pill = ~1.005×).
+        withAnimation(.spring(response: 0.16, dampingFraction: 0.55)) {
+            pulseScale = 1.005
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.62)) {
+                pulseScale = 1.0
+            }
         }
     }
 
@@ -103,6 +146,7 @@ struct IrisPanelView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .glassEffect(.regular.interactive(), in: .capsule)
+        .scaleEffect(pulseScale, anchor: .center)
     }
 
     private var sendButton: some View {
@@ -346,5 +390,100 @@ struct MarkdownText: View {
         case 3: 18
         default: 16
         }
+    }
+}
+
+// MARK: - Siri-style bleed tint
+
+/// Colored tint that "bleeds" into the response card from the top —
+/// matches the effect macOS Siri uses when its answer arrives. A circular
+/// mask anchored at the top expands outward; the mask edge is feathered
+/// (`.blur`) so it looks soft. The tint itself is a nebula of overlapping
+/// radial-gradient blobs that drift slowly so it never looks like a flat
+/// gradient. The whole thing is clipped to the same rounded rect as the
+/// host card so it can't bleed outside the corner radius.
+struct SiriBleedTint: View {
+    let progress: CGFloat
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            // Radius large enough to fully cover at progress = 1.
+            let maxRadius = sqrt(w * w + h * h) * 1.1
+            let radius = max(0.0001, maxRadius * progress)
+
+            TimelineView(.animation) { ctx in
+                let t = ctx.date.timeIntervalSinceReferenceDate
+                ZStack {
+                    NebulaBlob(color: Color(red: 0.20, green: 0.78, blue: 0.62), // teal-green
+                               cx: 0.28 + 0.05 * sin(t * 0.45),
+                               cy: 0.30 + 0.04 * cos(t * 0.55),
+                               sizeFactor: 0.95,
+                               alpha: 0.28,
+                               w: w, h: h)
+                    NebulaBlob(color: Color(red: 0.25, green: 0.55, blue: 0.95), // royal blue
+                               cx: 0.72 + 0.06 * cos(t * 0.35),
+                               cy: 0.35 + 0.05 * sin(t * 0.50),
+                               sizeFactor: 0.90,
+                               alpha: 0.26,
+                               w: w, h: h)
+                    NebulaBlob(color: Color(red: 0.20, green: 0.70, blue: 1.00), // sky blue
+                               cx: 0.45 + 0.08 * sin(t * 0.55 + 1.3),
+                               cy: 0.70 + 0.05 * cos(t * 0.40 + 0.7),
+                               sizeFactor: 1.05,
+                               alpha: 0.24,
+                               w: w, h: h)
+                    NebulaBlob(color: Color(red: 0.40, green: 0.85, blue: 0.55), // mint
+                               cx: 0.20 + 0.06 * cos(t * 0.30 + 0.4),
+                               cy: 0.78 + 0.04 * sin(t * 0.45 + 1.1),
+                               sizeFactor: 0.80,
+                               alpha: 0.22,
+                               w: w, h: h)
+                    NebulaBlob(color: Color(red: 0.30, green: 0.65, blue: 0.80), // cyan-teal
+                               cx: 0.85 + 0.05 * sin(t * 0.40 + 2.1),
+                               cy: 0.65 + 0.05 * cos(t * 0.35 + 1.6),
+                               sizeFactor: 0.75,
+                               alpha: 0.20,
+                               w: w, h: h)
+                }
+                .blur(radius: 22)
+                .blendMode(.plusLighter)
+            }
+            .mask(
+                Circle()
+                    .frame(width: radius * 2, height: radius * 2)
+                    .position(x: w * 0.5, y: 0)
+                    .blur(radius: 14)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .allowsHitTesting(false)
+            .opacity(min(0.7, Double(progress)))
+        }
+    }
+}
+
+private struct NebulaBlob: View {
+    let color: Color
+    let cx: Double
+    let cy: Double
+    let sizeFactor: Double
+    let alpha: Double
+    let w: CGFloat
+    let h: CGFloat
+
+    var body: some View {
+        let radius = max(w, h) * CGFloat(sizeFactor)
+        return RadialGradient(
+            gradient: Gradient(stops: [
+                .init(color: color.opacity(alpha), location: 0.0),
+                .init(color: color.opacity(alpha * 0.55), location: 0.4),
+                .init(color: color.opacity(0.0), location: 1.0)
+            ]),
+            center: UnitPoint(x: cx, y: cy),
+            startRadius: 0,
+            endRadius: radius
+        )
     }
 }

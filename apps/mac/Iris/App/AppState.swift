@@ -21,6 +21,10 @@ final class AppState {
     /// `finishClose()` so the controller can tear down the window.
     var closeRequestCounter: Int = 0
 
+    /// Bumped each time the user submits a prompt. The view watches this
+    /// to play a quick scale + brightness "pulse" so the input feels alive.
+    var submitPulseCounter: Int = 0
+
     let settings = AppSettings()
     let orbController: OrbWindowController
     let hotkey = GlobalHotkey()
@@ -71,6 +75,7 @@ final class AppState {
         guard !trimmed.isEmpty else { return }
         inputText = ""
         latestResponse = ""
+        submitPulseCounter += 1
         Task { [weak self] in
             guard let self else { return }
             await self.ensureOrchestrator().turn(userText: trimmed)
