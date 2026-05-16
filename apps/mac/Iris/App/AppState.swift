@@ -186,6 +186,10 @@ final class AppState {
     }
 
     func togglePanel() {
+        guard settings.hasCompletedOnboarding else {
+            OnboardingWindowController.shared?.bringToFront()
+            return
+        }
         if orbController.isShown && !orbController.isClosing {
             requestClose()
         } else {

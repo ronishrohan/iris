@@ -58,6 +58,11 @@ final class AppSettings {
         defaults.set(enabled, forKey: "tool.\(name).enabled")
     }
 
+    var hasCompletedOnboarding: Bool {
+        get { (defaults.object(forKey: K.hasCompletedOnboarding) as? Bool) ?? false }
+        set { defaults.set(newValue, forKey: K.hasCompletedOnboarding) }
+    }
+
     private enum K {
         static let deepseekApiKey = "deepseekApiKey"
         static let defaultModel = "defaultModel"
@@ -65,5 +70,6 @@ final class AppSettings {
         static let hotkeyModifiers = "hotkeyModifiers"
         static let wakeWordEnabled = "wakeWordEnabled"
         static let voiceOnShortcut = "voiceOnShortcut"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 }

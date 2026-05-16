@@ -39,6 +39,7 @@ targets:
         NSRemindersUsageDescription: Iris can read and create reminders when you ask.
         NSContactsUsageDescription: Iris uses contacts to send messages and emails when you ask.
         NSSystemAdministrationUsageDescription: Iris uses accessibility to register global hotkeys and control system volume.
+        ATSApplicationFontsPath: Jersey10-Regular.ttf
     entitlements:
       path: Iris/Iris.entitlements
       properties:
