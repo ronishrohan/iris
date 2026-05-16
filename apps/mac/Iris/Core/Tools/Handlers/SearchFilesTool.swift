@@ -45,45 +45,80 @@ struct SearchFilesTool: Tool {
                 clauses.append(NSPredicate(format: "%@ IN kMDItemContentTypeTree", uti))
             }
         }
-        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: clauses)
+        // NSMetadataQuery throws on a single-subpredicate NSCompoundPredicate,
+        // so unwrap when we only have one clause.
+        let predicate: NSPredicate = clauses.count == 1
+            ? clauses[0]
+            : NSCompoundPredicate(andPredicateWithSubpredicates: clauses)
 
-        let paths: [String] = await withCheckedContinuation { cont in
+        let paths: [String] = await runSpotlightQuery(predicate: predicate, hardTimeout: 4.0)
+        if paths.isEmpty { return "No files matched \"\(q)\"." }
+        return paths.map { "• \($0)" }.joined(separator: "\n")
+    }
+
+    /// Wraps NSMetadataQuery so it always returns within `hardTimeout`
+    /// and tears its observer + query down exactly once. Honours
+    /// Task.cancellation: if the parent Task is cancelled the query is
+    /// stopped immediately.
+    private func runSpotlightQuery(predicate: NSPredicate,
+                                   hardTimeout: TimeInterval) async -> [String] {
+        await withCheckedContinuation { cont in
             let box = QueryBox()
             box.query = NSMetadataQuery()
-            let q = box.query!
+            guard let q = box.query else {
+                cont.resume(returning: [])
+                return
+            }
             q.predicate = predicate
             q.searchScopes = [NSMetadataQueryUserHomeScope]
-            q.sortDescriptors = [NSSortDescriptor(key: NSMetadataItemFSContentChangeDateKey, ascending: false)]
+            q.sortDescriptors = [
+                NSSortDescriptor(key: NSMetadataItemFSContentChangeDateKey, ascending: false)
+            ]
 
-            var observer: NSObjectProtocol?
-            observer = NotificationCenter.default.addObserver(
+            // Single-shot resume: prevents double resume from the
+            // observer-then-timeout race or vice-versa.
+            let resumeOnce: ([String]) -> Void = { [box] paths in
+                let willResume: Bool = {
+                    if box.finished { return false }
+                    box.finished = true
+                    return true
+                }()
+                guard willResume else { return }
+                if let obs = box.observer {
+                    NotificationCenter.default.removeObserver(obs)
+                    box.observer = nil
+                }
+                if let q = box.query {
+                    q.disableUpdates()
+                    q.stop()
+                    box.query = nil
+                }
+                cont.resume(returning: paths)
+            }
+
+            box.observer = NotificationCenter.default.addObserver(
                 forName: .NSMetadataQueryDidFinishGathering,
                 object: q, queue: .main
-            ) { [box] _ in
-                guard let q = box.query else { return }
-                q.disableUpdates()
-                q.stop()
+            ) { [weak box] _ in
+                guard let box, let q = box.query else { return }
                 let items = (q.results as? [NSMetadataItem]) ?? []
                 let out: [String] = items.prefix(15).compactMap { item in
                     item.value(forAttribute: NSMetadataItemPathKey) as? String
                 }
-                if let observer { NotificationCenter.default.removeObserver(observer) }
-                box.finished = true
-                cont.resume(returning: out)
+                resumeOnce(out)
             }
-            DispatchQueue.main.async { [box] in
-                _ = box.query?.start()
+
+            DispatchQueue.main.async {
+                _ = q.start()
             }
-            // safety timeout
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [box] in
-                guard !box.finished, let q = box.query, q.isStarted else { return }
-                q.stop()
-                box.finished = true
-                cont.resume(returning: [])
+
+            // Hard timeout: short, so a stuck Spotlight can't hang the
+            // turn (the user can also Esc to interrupt at the
+            // orchestrator level, but the tool itself stays bounded).
+            DispatchQueue.main.asyncAfter(deadline: .now() + hardTimeout) {
+                resumeOnce([])
             }
         }
-        if paths.isEmpty { return "No files matched \"\(q)\"." }
-        return paths.map { "• \($0)" }.joined(separator: "\n")
     }
 
     func runRich(argumentsJSON: String) async throws -> ToolRunResult {
@@ -108,5 +143,6 @@ struct SearchFilesTool: Tool {
 
 private final class QueryBox: @unchecked Sendable {
     var query: NSMetadataQuery?
+    var observer: NSObjectProtocol?
     var finished = false
 }
